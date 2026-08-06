@@ -1,8 +1,12 @@
+"use client";
 
+export default function OrderPage() {
+  let count = 0;
+  count++;
 
-
-export default function orderPage(){
-    let count =0;
-    count++;
-    console.log(count);
+  return (
+    <div>
+      <h1>Orders : {count}</h1>
+    </div>
+  );
 }
