@@ -1,80 +1,55 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import prisma from "@/lib/prisma";
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { email, password } = body;
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  providers: [
 
-    // Validation
-    if (!email || !password) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Email and Password are required",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
+    // Email + Password
+    Credentials({
+      credentials: {
+        email: {},
+        password: {},
       },
-    });
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User not found",
-        },
-        { status: 404 }
-      );
-    }
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          return null;
+        }
 
-    // Compare password
-    const match = bcrypt.compareSync(password, user.password);
+        const user = await prisma.user.findUnique({
+          where: {
+            email: credentials.email as string,
+          },
+        });
 
-    if (!match) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid credentials",
-        },
-        { status: 401 }
-      );
-    }
+        if (!user) {
+          return null;
+        }
 
-    // Set cookie
-    const cookieStore = await cookies();
+        const match = await bcrypt.compare(
+          credentials.password as string,
+          user.password
+        );
 
-    cookieStore.set("token", "your-jwt-token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+        if (!match) {
+          return null;
+        }
 
-    return NextResponse.json({
-      success: true,
-      message: "Login successful",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+        return {
+          id: user.id.toString(),
+          name: user.name,
+          email: user.email,
+        };
       },
-    });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Internal Server Error",
-      },
-      { status: 500 }
-    );
-  }
-}
+    }),
+
+    // Google
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+});

@@ -1,39 +1,42 @@
-type Props = {
-  image: string;
-  title: string;
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Product = {
+  id: number;
+  name: string;
   price: number;
-  category: string;
   description: string;
+  imageUrl: string;
+  categoryId: number;
 };
 
-export default function MenuCard({
-  image,
-  title,
-  price,
-  category,
-  description,
-}: Props) {
+export default function MenuPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const getProducts = async () => {
+      const res = await fetch("/api/products");
+      const data = await res.json();
+
+      setProducts(data.data);
+    };
+
+    getProducts();
+  }, []);
+
   return (
-    <div className="w-72 rounded-2xl overflow-hidden shadow-md border border-gray-300">
-      <img
-        src={image}
-        alt={title}
-        className="w-full h-48 object-cover"
-      />
-
-      <div className="flex flex-col gap-2 p-4">
-        <h2 className="text-lg font-bold">{title}</h2>
-
-        <p className="text-sm text-gray-500">{description}</p>
-
-        <p className="text-sm text-gray-600">{category}</p>
-
-        <p className="text-xl font-bold">₹{price.toFixed(2)}</p>
-
-        <button className="bg-amber-600 text-white py-2 rounded-lg">
-          Add to Cart
-        </button>
-      </div>
+    <div className="grid grid-cols-1 gap-6 p-6 md:grid-cols-2 lg:grid-cols-3">
+      {products.map((product) => (
+        <Menu
+          key={product.id}
+          image={product.imageUrl}
+          title={product.name}
+          price={product.price}
+          category={String(product.categoryId)}
+          description={product.description}
+        />
+      ))}
     </div>
   );
 }
