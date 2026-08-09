@@ -48,7 +48,12 @@ export default function MenuPage() {
  {products.map((product)=>(
 <MenuCard 
 key={product.id}
-     product={product}/>
+     product={{
+      ...product,
+      onAddToCart: () => {
+        console.log(`Added ${product.name} to cart!`);
+      }
+    }} />
 
  ))}
     </div>
