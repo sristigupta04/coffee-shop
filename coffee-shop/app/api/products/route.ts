@@ -23,6 +23,7 @@ export async function GET() {
         success: false,
         message: "Internal Server Error",
       },
+
       { status: 500 }
     );
   }
@@ -105,4 +106,106 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(req:NextRequest){
+try{
+  const body = await req.json();
+  const {id } = body ;
+  if(!id){
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Product ID is required",
+      },
+      { status: 400 }
+    );
+  }
+  const val = await prisma.product.delete({
+    where:{
+      id:Number(id),
+    }
+  });
+   return NextResponse.json(
+    {
+      success:true,
+      data:val
+    },
+    {status:200}
+   )
+}
+
+catch(error){
+  return NextResponse.json(
+    {
+      success:false,
+      message:"failed to delete product"
+},{status:500}
+  )}
+   
+}
+
+
+export async function PUT(req: NextRequest) {
+    const body = await req.json();
+    const {id,name,description,price,category,image} = body;
+    try{
+      if(!id){
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Product ID is required",
+          },
+          { status: 400 }
+        );
+      }
+
+      
+      const val = await prisma.product.findUnique({
+        where:{
+          id:Number(id)
+        }
+      });
+      if(!val){
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Product not found",
+          },
+          { status: 404 }
+        );
+      }
+
+          
+        const update = await prisma.product.update({
+    where:{
+      id:Number(id)
+    },
+    data:{
+      name:name,
+      description:description,
+      price: Number(price),
+      category:category,
+      image:image,
+      stock:Number(body.stock) || val.stock,
+    }});
+
+    return NextResponse.json({
+      success:true,
+      message:"product updated",
+      data:update
+    },{
+      status:200
+    })
+
+  }catch(error){
+    return NextResponse.json(
+      {
+        success:false,
+        message:"Failed to update product"
+      },
+      {status:500}
+    )
+  }
+
 }
