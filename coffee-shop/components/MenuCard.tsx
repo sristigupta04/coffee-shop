@@ -1,33 +1,40 @@
-type Props = {
-  image: string;
-  title: string;
-  category: string;
-  description: string;
-  price: number;
-  rating: number;
-  isAvailable: boolean;
+type Product = {
+    id:number;
+  name: string;
+   price: number;
+    description: string;
+ categoryId: string;
+ imageUrl:string;
   onAddToCart: () => void;
 };
 
-export default  function MenuCard({ image, title, category, description, price, rating, isAvailable, onAddToCart }: Props){
+type product ={
+    product:Product;
+}
+export default  function MenuCard({ product }: product){
     return(
-        <div>
-<div className="flex flex-col item-center ">
-    <img src={image} alt={title} />
-    <p className="text-lg font-semibold">{title}</p>
+        
+            <div className="bg-[#f8f3ed] rounded-2xl overflow-hidden border border-[#d6c4b5] shadow-md hover:shadow-lg transition-shadow duration-300">
+                <div className="relative h-52 overflow-hidden">
+                    <img src={product.imageUrl} alt={product.name}
+                    className="w-full h-full object-cover"/>
 
-
+<div className="absolute top-3 right-3 bg-{#3b2115] text-white text-sm px-3 py-1 rounded-full">
+4.5
 </div>
-
-<div className="flex flex-col item-center ">
-    <p className="text-sm text-gray-500">{category}</p>
-    <p className="text-sm text-gray-500">{description}</p>
-    <p className="text-sm text-gray-500">{price}</p>
-    <p className="text-sm text-gray-500">{rating}</p>
-    <p className="text-sm text-gray-500">{isAvailable ? "Available" : "Not Available"}</p>
-    <button onClick={onAddToCart} className="bg-blue-500 text-white px-4 py-2 rounded">Add to Cart</button>
 </div>
-            </div>
+<div className="p-5">
+    <h2 className="text-xl font-semibold text-[#3b2115]">{product.name}</h2>
+    <p className="text-xl font-semibold text-[#3b2115]">
+        {product.description}
+    </p>
+    <span className="text-xl font-bold text-[#9a424]">
+        ?{product.price.toFixed(2)}
+    </span>
+    <button onClick={product.onAddToCart}
+    className="w-10 h-10 rounded-full bg-[#9a4f24] text-white flex items-center justify-center mt-3 hover:bg-[#7a3620] transition-colors duration-300"> +</button>
 
+        </div>
+        </div>
     )
 }
