@@ -1,31 +1,31 @@
-type Product ={
+"use client"
+
+import {useState} from "react";
+
+type product = {
     image:string;
     name:string;
-    price:number;
     description:string;
-
+    price:string;
 }
-type products ={
-    product:Product;
-}
-export default function ProducCard({ product }:products){
-    const { image, name, price, description } = product;
-    return (
-        <>
-        <div className="product-card" >
-        
-         <img src={image} alt={name}/>
-         <p>{name}</p>
-         <p>${price.toFixed(2)}</p>
-         <p>{description}</p>
-         <div>
-            <button >-</button>
-            <span>0</span>
-            <button>+</button>
-         </div>
-        </div>
-        </>
 
-    )
+
+type categoryProduct ={
+    product:product
+}
+
+export default function Product({
+    product
+}:categoryProduct){
+    const [quant,setquant] = useState(0);
+ const {image,name, description,price} = product;
+
+ const increase = ()=>{
+    setquant((prev)=>Math.min(100,prev+1))
+ }
+const decrease = ()=>{
+    setquant((prev)=>Math.max(10,prev+1))
+};
+
 
 }
