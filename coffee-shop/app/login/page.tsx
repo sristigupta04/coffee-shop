@@ -87,7 +87,7 @@ export default function Login() {
 
         {/* LEFT SIDE */}
 <div
-  className="relative flex min-h-[650px] flex-col justify-center overflow-hidden px-10 py-16 lg:px-14"
+  className="relative flex min-h-162.5 flex-col justify-center overflow-hidden px-10 py-16 lg:px-14"
   style={{
     backgroundImage: "url('/coffee-logins.jpg')",
     backgroundSize: "cover",
@@ -104,7 +104,7 @@ export default function Login() {
       Premium Quality
     </p>
 
-    <h1 className="font-[family-name:var(--font-playfair)] text-6xl font-bold leading-[0.95] text-[#f5e1ca] md:text-7xl">
+    <h1 className="font-(family-name:--font-playfair) text-6xl font-bold leading-[0.95] text-[#f5e1ca] md:text-7xl">
       Discover the
       <br />
       COFFEE
@@ -141,7 +141,7 @@ export default function Login() {
 
               {/* Heading */}
               <div className="mb-8 text-center">
-                <h2 className="font-[family-name:var(--font-playfair)] text-4xl font-bold text-[#f5e1ca]">
+                <h2 className="font-(family-name:--font-playfair) text-4xl font-bold text-[#f5e1ca]">
                   Welcome Back
                 </h2>
 

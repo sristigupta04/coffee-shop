@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-export default function GetProducts() {
-  const [form, setForm] = useState({
+export default function getProduct() {
+  const [form, setform] = useState({
     name: "",
     price: 0,
     description: "",
@@ -14,7 +14,7 @@ export default function GetProducts() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
-    setForm({
+    setform({
       ...form,
       [name]:
         name === "price" || name === "categoryId"
@@ -23,11 +23,11 @@ export default function GetProducts() {
     });
   };
 
-  const saveProduct = async (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const response = await fetch("/api/products", {
+      const res = await fetch("/api/products", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -35,11 +35,11 @@ export default function GetProducts() {
         body: JSON.stringify(form),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (response.ok) {
-        alert("Product added successfully");
-        setForm({
+      if (res.ok) {
+        alert("product added successfully");
+        setform({
           name: "",
           price: 0,
           description: "",
@@ -58,7 +58,7 @@ export default function GetProducts() {
   return (
     <div className="min-h-screen bg-gray-100 px-4 py-10">
       <form
-        onSubmit={saveProduct}
+        onSubmit={save}
         className="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-2xl bg-white p-8 shadow-lg"
       >
         <h1 className="text-3xl font-bold text-gray-800">
@@ -68,29 +68,29 @@ export default function GetProducts() {
         {/* Name */}
         <div>
           <label className="mb-2 block font-medium text-gray-700">
-            Product Name
+            product name
           </label>
+
 
           <input
             type="text"
             name="name"
-            placeholder="Enter product name"
+            placeholder=" enter product name"
             value={form.name}
             onChange={handleChange}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
           />
         </div>
-
         {/* Price */}
         <div>
           <label className="mb-2 block font-medium text-gray-700">
             Price
           </label>
 
-          <input
+   <input
             type="number"
             name="price"
-            placeholder="Enter price"
+            placeholder="enter price"
             value={form.price}
             onChange={handleChange}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
@@ -100,13 +100,13 @@ export default function GetProducts() {
         {/* Description */}
         <div>
           <label className="mb-2 block font-medium text-gray-700">
-            Description
+            description
           </label>
 
           <input
             type="text"
             name="description"
-            placeholder="Enter description"
+            placeholder="enter description"
             value={form.description}
             onChange={handleChange}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
@@ -150,7 +150,7 @@ export default function GetProducts() {
           type="submit"
           className="mt-2 rounded-lg bg-orange-600 px-5 py-3 font-semibold text-white transition hover:bg-orange-700"
         >
-          Add Product
+          Add product
         </button>
       </form>
     </div>
