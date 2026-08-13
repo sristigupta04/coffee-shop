@@ -1,6 +1,6 @@
-import ProductCard from "./ProductCard";
+import Product from "./ProductCard";
 
-type Product = {
+type Products = {
   id: string;
   name: string;
   price: number;
@@ -12,20 +12,19 @@ type Product = {
 };
 
 type ProductGridProps = {
-  products: Product[];
+  product: Products;
 };
 
-export default function ProductGrid({
-  products,
-}: ProductGridProps) {
-  return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      {products.map((product) => (
-        <ProductCard
-          key={product.id}
-          product={product}
-        />
-      ))}
+
+
+export default function productGrid({product}:ProductGridProps){
+  return(
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+     {product.map((product)=>(
+      <Product 
+      key={product.id}
+      product ={product}/>
+     ))}
     </div>
-  );
+  )
 }
