@@ -123,7 +123,7 @@ try{
   }
   const val = await prisma.product.delete({
     where:{
-      id:Number(id),
+      id:id,
     }
   });
    return NextResponse.json(
@@ -163,7 +163,7 @@ export async function PUT(req: NextRequest) {
       
       const val = await prisma.product.findUnique({
         where:{
-          id:Number(id)
+          id:id
         }
       });
       if(!val){
@@ -179,7 +179,7 @@ export async function PUT(req: NextRequest) {
           
         const update = await prisma.product.update({
     where:{
-      id:Number(id)
+      id:id
     },
     data:{
       name:name,

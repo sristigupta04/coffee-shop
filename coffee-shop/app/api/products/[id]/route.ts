@@ -1,25 +1,24 @@
 import { prisma } from "@/app/lib/prisma";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 // GET All Products
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const {id }= await params;
-    const products = await prisma.product.findUnique({
-      where:{
-        id:id,
+export async function GET() {
+  try{
+    const product = await prisma.product.findMany({
+      orderBy:{
+        createdAt:"desc"
       }
     });
-if(!products){
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Product not found",
-      },
-      { status: 404 }
-    );
+    return NextResponse.json({
+      success:true,
+      msg:"product founded",
+      products: product
+    },
+      {status:200});
+
   }
-}catch(error) {
+ 
+catch(error) {
     return NextResponse.json(
       {
         success: false,

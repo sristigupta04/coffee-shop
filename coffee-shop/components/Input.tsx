@@ -12,7 +12,7 @@ export default function Input({label,type,placeholder,value,onChange}:Prop){
 
             
             <input 
-            type={type}
+            type="text"
             placeholder={placeholder}
             value={value}
             onChange={(event) => onChange(event.target.value)}

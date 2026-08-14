@@ -50,7 +50,7 @@ return(
 
 
 <p className="mt-3 text-lg font-bold text-[#8b451f]">
-       ₹{price.toFixed(2)}
+       ₹{price}
 </p>
 
 {/* quanttity  includee inbox style everything */}
