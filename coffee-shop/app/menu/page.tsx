@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import MenuCard from "@/components/Menu/MenuCard";
-
+import  Store from "@/components/Menu/StoreBar";
+import Categoryhead from "@/components/Menu/categoryNav";
 type Product = {
   id: string;
   name: string;
@@ -15,6 +16,7 @@ type Product = {
 export default function Menu(){
   const [prod,setprod]  = useState<Product[]>([]);
   const [load,setload] = useState(true);
+  const [category, setCategory] = useState("All");
   useEffect(()=>{
     const prod = async()=>{
       try{
@@ -40,6 +42,10 @@ export default function Menu(){
     prod();
   },[]);
 
+
+  const filter = category === "All"
+  ? prod
+  : prod.filter((product) => product.categoryId === category);
   return(
  <main className="min-h-screen bg-[#f8f3ed] px-6 py-10 sm:px-4 md:px-8">
   {/* menu ka uper wala part */}
@@ -63,29 +69,23 @@ export default function Menu(){
 
 
   </section>
+<section className="mx-auto mt-10 max-w-6xl">
+  <Store
+    location="location"
+    DineIn="Dine In"
+    Takeway="Takeaway"
+  />
+</section>
 
 
   {/* categoriessss */}
-  <section className="mx-auto mt-10 max-w-6xl rounded-2xl bg-white p-5 shadow-sm border border-[#eaded4]">
-    <h2 className="mb-5 text-center text-lg font-semibold text-[#3b2115]">
-      Categories
-    </h2>
 
-    <div className="flex flex-wrap justify-center gap-3">
-      <button className="rounded-full bg-[#3b2115] px-6  py-3 text-sm font-semibold text-white">
-        All
-      </button>
-      <button className="rounded-full border border-[#d6c4b5] bg-white px-6 py-3 text-sm font-medium text-[#4b2e20] transition hover:bg-[#3b2115] hover:text-white">
-        Coffee
-      </button>
-      <button className="rounded-full border border-[#d6c4b5] bg-white px-6 py-3 text-sm font-medium text-[#4b2e20] transition hover:bg-[#3b2115] hover:text-white">
-        Pastries
-      </button>
-      <button className="rounded-full border border-[#d6c4b5] bg-white px-6 py-3 text-sm font-medium text-[#4b2e20] transition hover:bg-[#3b2115] hover:text-white">
-        Specialty Drinks
-      </button>
-    </div>
-  </section>
+
+
+<Categoryhead
+ categoryChecked={category}
+ onCategory={(category:string)=>setCategory(category)}
+/>
 
 {/* product loading */}
 <section className="mx-auto mt-12 max-w-6xl">
@@ -95,7 +95,7 @@ export default function Menu(){
     <div className="py-20 text-center text-[#80695b]">No products available.</div>
   ):(
    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-  {prod.map((product) => (
+  {filter.map((product) => (
     <MenuCard
       key={product.id}
       product={{

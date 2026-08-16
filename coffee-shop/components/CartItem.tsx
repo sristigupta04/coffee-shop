@@ -1,3 +1,6 @@
+"use client";
+
+
 type Props = {
   image: string;
   name: string;
@@ -6,10 +9,10 @@ type Props = {
   quantity: number;
   totalPrice: number;
 
-  removeItem: () => void;
-
-  buttonText?: string;
-  onButtonClick?: () => void;
+  removeitem: () => void;
+  onincrease:()=>void;
+  ondecrease:()=>void;
+ 
 };
 
 export default function CartItem({
@@ -19,9 +22,9 @@ export default function CartItem({
   price,
   quantity,
   totalPrice,
-  removeItem,
-  buttonText,
-  onButtonClick,
+  removeitem,
+  onincrease,
+  ondecrease,
 }: Props) {
   return (
     <div className="flex items-center justify-between bg-white rounded-xl shadow-md p-5 mb-5">
@@ -32,6 +35,10 @@ export default function CartItem({
         alt={name}
         className="w-28 h-28 rounded-lg object-cover"
       />
+
+
+
+
 
       {/* Product Details */}
       <div className="flex-1 ml-6">
@@ -53,25 +60,37 @@ export default function CartItem({
       </div>
 
       {/* Buttons */}
-      <div className="flex flex-col gap-3">
+      <div className=" mt-3 flex items-center  gap-3">
 
         <button
-          onClick={removeItem}
-          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
+          onClick={ondecrease}
+          className=" flex h-8 w-8 items-center justify-center rounded-full
+          bg-[#9a4f24] text-white hover:bg-[#7a3620]"
         >
-          Remove
+          -
         </button>
 
-        {buttonText && (
-          <button
-            onClick={onButtonClick}
-            className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg"
-          >
-            {buttonText}
-          </button>
-        )}
 
+
+     <span className="w-6 text-center font-semibold text-[#3b2115]">
+  {quantity}
+</span>
+                 
+
+
+                  <button onClick={onincrease}
+          className=" flex h-8 w-8 items-center justify-center rounded-full
+          bg-[#9a4f24] text-white hover:bg-[#7a3620]"
+        >
+          +
+        </button>
       </div>
+
+
+      <button onClick={removeitem} 
+      className="rounded-lg bg-red-500 px-4 py-2 text-white hover:bg-red-600">
+        Remove
+      </button>
 
     </div>
   );
