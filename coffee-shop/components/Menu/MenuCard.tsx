@@ -65,8 +65,6 @@ export default  function MenuCard({ product }: product){
 
 
 
-
-
     <span className="mx-2 text-lg font-semibold text-[#3b2115]">{quant}</span>
 
 
@@ -74,9 +72,14 @@ export default  function MenuCard({ product }: product){
     <button onClick={increase}
     
     className="flex items-center justify-center w-10 h-10 rounded-full bg-[#9a4f24] text-white  mt-3 hover:bg-[#7a3620] transition-colors duration-300"> +</button>
-
+ 
         </div>
-</div>
+
+        <button onClick={()=>product.onAddToCart(quant)}
+        className="mt-4 w-full rounded-lg bg-[#8b4a24] px-4 py-2 text-white hover:bg-[#7a3620] transition-colors duration-300">
+            Add to Cart
+        </button>
+    </div>
 </div>
 )
 }

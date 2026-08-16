@@ -95,3 +95,19 @@ export default function CartItem({
     </div>
   );
 }
+
+
+// export default  function MenuCard({ product }: product){
+//     const [quant,setquant] = useState(1);
+//     const decrease =()=>{
+//         const newquant = Math.max(1,quant-1);
+//         setquant(newquant);
+//         product.onAddToCart(newquant);
+//     }
+//      const increase =()=>{
+//         const newquant = Math.min(10,quant+1);
+//         setquant(newquant);
+//         product.onAddToCart(newquant);
+//      }
+
+     

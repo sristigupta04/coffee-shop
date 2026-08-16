@@ -13,7 +13,7 @@ export default function Search(){
     
     const [item, setitem] = useState("");
     const [prod ,setprod]  = useState<Product[]>([]);
-    const [load,setload] = useState(false);
+    const [load,setload] = useState(true);
 const router = useRouter();
 
 useEffect(()=>{
@@ -44,7 +44,7 @@ try{
 const handle = (id:string)=>{
     setitem("");
     setload(false);
-    router.push(`/menu/${id}`);
+    router.push(`/menu?search=${encodeURIComponent(item)}`);                     
 }
     return(
         <div className="relative">
