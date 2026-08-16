@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import {  useEffect ,useState } from "react";
 
 // import product from MenuCard
 type product ={
@@ -13,10 +13,22 @@ type product ={
    stock:number;
    isAvailable:boolean;
 })=>void;
-}
 
+initialval?:{
+    name:string;
+    price:number;
+    description:string;
+    image:string;
+category:string;
+    stock:number;
+    isAvailable:boolean;
+}|null;
+btntext?:string;
+}
 export default function Productform({
     onSubmit,
+    initialval,
+    btntext
 }:product){
 
 
@@ -29,6 +41,13 @@ export default function Productform({
     stock:0,
     isAvailable:true,
     });
+
+    useEffect(() => {
+  if (initialval) {
+    setform(initialval);
+  }
+}, [initialval]);
+
 
 const handle =(
     e:React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -47,13 +66,17 @@ const submit = (e:React.FormEvent<HTMLFormElement>)=>{
     onSubmit(form);
 }
 
+
 return (
     <form 
     onSubmit={submit}
-    className="mx-auto flex w-full
-     max-w-lg flex-col gap-5 rounded-2xl bg-white p-8 shadow-lg">
-        <h1 className="text-3xl font-bold text-[#3b2115]">Add  new Productt</h1>
+      className="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-2xl bg-white p-8 shadow-lg">
 
+<h1 className="text-3xl font-bold text-[#3b2115]">
+  {btntext === "Update Product"
+    ? "Edit Product"
+    : "Add New Product"}
+</h1>
         {/* product name  */}
         <div>
             <label className="mb-2 block text-sm font-medium text-[#3b2115]">
@@ -168,6 +191,6 @@ return (
 </div>
 <button 
 type="submit"
-className="rounded-lg bg-[#8b4a24] px-4 py-2 text-white hover:bg-[#6f351c]">add product </button></form>
+className="rounded-lg bg-[#8b4a24] px-4 py-2 text-white hover:bg-[#6f351c]">{btntext || "Add Product"}</button></form>
 )
 }

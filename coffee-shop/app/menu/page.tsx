@@ -20,7 +20,7 @@ export default function Menu(){
       try{
       const res= await fetch("/api/products");
       const data = await res.json();
-      const newprod = data.map((product:any)=>({
+      const newprod = data.data.map((product:any)=>({
         id:product.id,
         name:product.name,
         price:product.price,  

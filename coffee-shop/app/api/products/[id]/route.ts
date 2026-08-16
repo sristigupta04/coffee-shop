@@ -5,7 +5,7 @@ import { NextResponse , NextRequest} from "next/server";
 type params ={
   params: Promise<{id:string}>
 }
-export async function GET( {params}:params){
+export async function GET(req: NextRequest, {params}:params){
   try{
   const {id} = await params;
   

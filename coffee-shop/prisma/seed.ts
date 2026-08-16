@@ -47,6 +47,7 @@ async function main() {
   ];
 
   const categories = [
+    "All",
     "Espresso",
     "Milk Coffee",
     "Cold Coffee",

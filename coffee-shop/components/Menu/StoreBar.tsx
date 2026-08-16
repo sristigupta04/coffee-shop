@@ -56,14 +56,14 @@ className="flex items-center gap-2 rounded-2xl bg-[#6f4e37] px-4 py-2"
   )}
 </div>
 
- <div className="flex rounded-lg- bg-[#f5eee8] p-1">
+ <div className="flex rounded-lg bg-[#f5eee8] p-1">
 <button onClick={()=>setorder("dineIn")}
 className={`rounded-2xl px-4 py-2 text-sm ${
   order === "dineIn"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
 }`}>{DineIn}</button>
 <button onClick={()=>setorder("takeway")}
 className={`rounded-2xl px-4 py-2 text-sm ${
-  order === "Takeway"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
+  order === "takeway"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
 }`}>{Takeway}</button>
 </div></div>
   )
