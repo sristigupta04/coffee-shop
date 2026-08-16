@@ -1,6 +1,6 @@
 "use client";
 
-import Store from "@/components/Order/StoreBar";
+import Store from "@/components/Menu/StoreBar";
 import Btn from "@/components/Button";
 import { useEffect, useState } from "react";
 

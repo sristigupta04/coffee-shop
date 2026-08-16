@@ -15,7 +15,6 @@ export default function Store({
   const [cord,setcord] =useState({lat:0 ,lng:0});
   const [order,setorder] = useState("dineIn");
 
-  const storage = ["location","DineIn","Takeway"];
   const geoLocation =()=>{
     if(!navigator.geolocation){
       seterror("your location is invalid");
@@ -36,8 +35,8 @@ export default function Store({
   return(
 <div className="flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
 <button onClick={geoLocation} 
-className="flex item-center gap-2 rounded-e-2xl bg-[#6f4e37] px-4 py-2"
-> Location
+className="flex items-center gap-2 rounded-2xl bg-[#6f4e37] px-4 py-2"
+> {location}
 
 </button>
 
@@ -49,7 +48,7 @@ className="flex item-center gap-2 rounded-e-2xl bg-[#6f4e37] px-4 py-2"
   )}
 
 
-<div className="flex  rounded-2xl bg-[$f5eee8] p-1">
+<div className="flex  rounded-2xl bg-[#f5eee8] p-1">
   {error && (
     <p className="mt-2 text-sm text-red-500">
       {error}
@@ -57,14 +56,14 @@ className="flex item-center gap-2 rounded-e-2xl bg-[#6f4e37] px-4 py-2"
   )}
 </div>
 
- <div className="flex rouned-lg- bg-[#f5eee8] p-1">
+ <div className="flex rounded-lg- bg-[#f5eee8] p-1">
 <button onClick={()=>setorder("dineIn")}
 className={`rounded-2xl px-4 py-2 text-sm ${
-  order === "dineIn"?"*:bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
+  order === "dineIn"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
 }`}>{DineIn}</button>
 <button onClick={()=>setorder("takeway")}
 className={`rounded-2xl px-4 py-2 text-sm ${
-  order === "takeway"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
+  order === "Takeway"?"bg-[#6f4e37] text-white":"bg-[#f5eee8] text-gray-700"
 }`}>{Takeway}</button>
 </div></div>
   )
