@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, {params}:params){
     return NextResponse.json({
       success:true,
       msg:"product founded",
-      products: product
+      data: product
     },
       {status:200});
 

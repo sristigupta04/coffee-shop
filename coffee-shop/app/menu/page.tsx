@@ -42,10 +42,11 @@ export default function Menu(){
     prod();
   },[]);
 
+ const allsearch= prod.filter((product)=> {
+  const filter = category === "All"|| product.categoryId === category;
 
-  const filter = category === "All"
-  ? prod
-  : prod.filter((product) => product.categoryId === category);
+  return  filter;
+  });
   return(
  <main className="min-h-screen bg-[#f8f3ed] px-6 py-10 sm:px-4 md:px-8">
   {/* menu ka uper wala part */}
@@ -69,6 +70,7 @@ export default function Menu(){
 
 
   </section>
+
 <section className="mx-auto mt-10 max-w-6xl">
   <Store
     location="location"
@@ -95,7 +97,7 @@ export default function Menu(){
     <div className="py-20 text-center text-[#80695b]">No products available.</div>
   ):(
    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-  {filter.map((product) => (
+  {allsearch.map((product) => (
     <MenuCard
       key={product.id}
       product={{

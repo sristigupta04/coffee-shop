@@ -1,8 +1,7 @@
 "use client";
 
-import { signOut } from "next-auth/react";
-import { useState } from "react";
 import Link from "next/link";
+import  Search from "@/components/searchBar";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -10,13 +9,12 @@ import {
   Contact,
   ClipboardList,
   ShoppingCart,
-  Search,
-  X,
+
+
   LogIn,
 } from "lucide-react";
 
 export default function Navbar() {
-  const [showSearch, setShowSearch] = useState(false);
 const pathname = usePathname();
 
 if (pathname === "/login") {
@@ -49,27 +47,9 @@ if (pathname === "/login") {
             icon={<Coffee size={18} />}
             text="Menu"
           />
+<Search/>
 
-          <NavItem
-            href="/contact"
-            icon={<Contact size={18} />}
-            text="Contact"
-          />
-
-          <NavItem
-            href="/orders"
-            icon={<ClipboardList size={18} />}
-            text="Orders"
-          />
-
-          {/* Search Button */}
-          <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="ml-2 rounded-xl p-3 text-[#4b2e1f] transition hover:bg-[#f3e5d3]"
-            title="Search"
-          >
-            {showSearch ? <X size={20} /> : <Search size={20} />}
-          </button>
+       
 
           {/* Cart */}
           <Link
@@ -95,24 +75,10 @@ if (pathname === "/login") {
         </div>
       </div>
 
-      {/* Search Box */}
-      {showSearch && (
-        <div className="border-t border-[#eadbc9] bg-[#fffaf3] px-10 py-4">
-          <div className="mx-auto flex max-w-3xl items-center rounded-xl border border-[#d9c4ad] bg-white px-4 py-3 shadow-sm">
-            <Search
-              size={20}
-              className="mr-3 text-[#8b4a24]"
-            />
-
-            <input
-              type="text"
-              placeholder="Search coffee..."
-              className="w-full bg-transparent text-[#4b2e1f] outline-none placeholder:text-[#a8907a]"
-            />
-          </div>
-        </div>
-      )}
-    </nav>
+      
+       </nav> 
+      
+  
   );
 }
 
