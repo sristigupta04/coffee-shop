@@ -3,6 +3,7 @@
 import Link from "next/link";
 import  Search from "@/components/searchBar";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Home,
   Coffee,
@@ -17,9 +18,36 @@ import {
 export default function Navbar() {
 const pathname = usePathname();
 
-if (pathname === "/login") {
+const [cartcount,setcartcount] = useState(0);
+
+
+useEffect(()=>{
+  const update = () => {
+
+  const saved = JSON.parse(localStorage.getItem("cart") || "[]"
+);
+
+  const count =  Array.isArray(saved) ?
+   saved.reduce((acc:any, item:any) => acc + (item.quantity || 0), 0) : 0;
+  setcartcount(count);
+
+  }
+  
+  update();
+
+
+window.addEventListener("cartUpdated", update);
+
+return () => {
+  window.removeEventListener("cartUpdated", update);
+};
+},[]);
+
+ if (pathname === "/login") {
   return null;
 }
+
+
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[#eadbc9] bg-[#fffaf3] shadow-sm">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-10">
@@ -59,7 +87,7 @@ if (pathname === "/login") {
             <ShoppingCart size={21} />
 
             <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#a85d25] text-xs font-bold text-white">
-              0
+              {cartcount}
             </span>
           </Link>
 

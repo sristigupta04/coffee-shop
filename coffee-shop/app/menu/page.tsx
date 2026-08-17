@@ -12,7 +12,8 @@ type Product = {
   description: string;
   imageUrl: string;
   categoryId: string;
-  onAddToCart: () => void;
+  onAddToCart: (quant: number) => void;
+  quantity?: number;
 };
 
 export default function Menu(){
@@ -45,6 +46,45 @@ export default function Menu(){
     };
     prod();
   },[]);
+
+
+  const addToCart = (product: Product, quant: number) => {
+  
+    const saved = JSON.parse(localStorage.getItem("cart") || "[]");
+
+    const exist = saved.find((item:Product)=>
+    item.id === product.id);
+    let update;
+    
+    if( exist){
+
+      update= saved.map((item:Product)=>
+      item.id === product.id ?{
+        ...item,
+        quantity: item.quantity + quant,
+      }
+      :item
+    );
+    }
+      else {
+        update = [
+          ...saved,
+          {
+            id:product.id,
+            name:product.name,
+            price:product.price,
+            description:product.description,
+            imageUrl:product.imageUrl,
+            categoryId:product.categoryId,      
+            quantity:quant,
+          }
+        ]
+      }
+      localStorage.setItem("cart", JSON.stringify(update));
+      window.dispatchEvent(new Event("cartUpdated"));
+          
+      
+    };
 
  const allsearch= prod.filter((product)=> {
   const filter = category === "All"|| product.categoryId === category;
@@ -142,8 +182,8 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
         product={{
           ...product,
           onAddToCart:(quant:number)=>{
-            console.log(`Added ${quant} of ${product.name} to cart`);
-          },
+          addToCart(product,quant);
+                          },
         }}
         />
 
@@ -177,7 +217,7 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
 
                 ...product,
                 onAddToCart:(quant:number)=>{
-                  console.log(`Added ${quant} of ${product.name} to cart`);
+                  addToCart(product,quant);
                 },
               }}
             />

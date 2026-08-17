@@ -25,10 +25,11 @@ type Product = {
 export default function Page() {
   const [cart, setcart] = useState<Cart[]>([]);
   const [recommend, setRecommend] = useState<Cart[]>([]);
+  const [allProducts, setAllProducts] = useState<Cart[]>([]);
   const [load, setload] = useState(true);
 
   // =========================
-  // GET CART + MENU PRODUCTS
+  // GET CART + ALL PRODUCTS
   // =========================
 
   useEffect(() => {
@@ -52,18 +53,15 @@ export default function Page() {
           ? data
           : data.products || data.data || [];
 
-        const recommended = products
+        // =========================
+        // FORMAT ALL MENU PRODUCTS
+        // =========================
+
+        const formattedProducts: Cart[] = products
           .filter(
             (product) =>
               product.isAvailable !== false
           )
-          .filter(
-            (product) =>
-              !saved.some(
-                (item) => item.id === product.id
-              )
-          )
-          .slice(0, 3)
           .map((product) => ({
             id: product.id,
             name: product.name,
@@ -77,7 +75,25 @@ export default function Page() {
             quantity: 1,
           }));
 
+        // IMPORTANT:
+        // Store ALL menu products
+        setAllProducts(formattedProducts);
+
+        // =========================
+        // FIRST 3 RECOMMENDATIONS
+        // =========================
+
+        const recommended = formattedProducts
+          .filter(
+            (product) =>
+              !saved.some(
+                (item) => item.id === product.id
+              )
+          )
+          .slice(0, 3);
+
         setRecommend(recommended);
+
       } catch (error) {
         console.error(
           "Recommendation error:",
@@ -212,7 +228,7 @@ export default function Page() {
   };
 
   // =========================
-  // ADD RECOMMENDED PRODUCT
+  // ADD RECOMMENDED
   // =========================
 
   const addRecommended = (product: Cart) => {
@@ -222,6 +238,7 @@ export default function Page() {
 
     let update: Cart[];
 
+    // Already in cart
     if (existing) {
       update = cart.map((item) =>
         item.id === product.id
@@ -232,6 +249,7 @@ export default function Page() {
           : item
       );
     } else {
+      // New product
       update = [
         ...cart,
         {
@@ -240,6 +258,10 @@ export default function Page() {
         },
       ];
     }
+
+    // =========================
+    // UPDATE CART
+    // =========================
 
     setcart(update);
 
@@ -250,12 +272,41 @@ export default function Page() {
 
     cartChanged();
 
-    // recommendation se product remove
-    setRecommend((prev) =>
-      prev.filter(
+    // =========================
+    // REMOVE CLICKED PRODUCT
+    // + ADD NEXT PRODUCT
+    // =========================
+
+    setRecommend((prev) => {
+      const remaining = prev.filter(
         (item) => item.id !== product.id
-      )
-    );
+      );
+
+      // Find next product from ALL MENU PRODUCTS
+      const nextProduct = allProducts.find(
+        (item) =>
+          // Not already in cart
+          !update.some(
+            (cartItem) =>
+              cartItem.id === item.id
+          ) &&
+          // Not already showing
+          !remaining.some(
+            (recItem) =>
+              recItem.id === item.id
+          )
+      );
+
+      // Immediately replace recommendation
+      if (nextProduct) {
+        return [
+          ...remaining,
+          nextProduct,
+        ];
+      }
+
+      return remaining;
+    });
   };
 
   // =========================
@@ -278,6 +329,7 @@ export default function Page() {
 
   return (
     <main className="min-h-screen bg-[#f5f0e7] px-4 py-8 sm:px-6 lg:px-10">
+
       <div className="mx-auto max-w-6xl">
 
         {/* ================= HEADER ================= */}
@@ -291,6 +343,7 @@ export default function Page() {
           <div className="mt-2 flex items-end justify-between gap-4">
 
             <div>
+
               <h1 className="text-4xl font-semibold text-[#39423b] sm:text-5xl">
                 Your Cart
               </h1>
@@ -301,13 +354,11 @@ export default function Page() {
                   ? "item"
                   : "items"}
               </p>
+
             </div>
 
-            {/* TOP CONTINUE SHOPPING */}
-
-           
-
           </div>
+
         </div>
 
         {/* ================= CART + SUMMARY ================= */}
@@ -336,7 +387,7 @@ export default function Page() {
 
             </div>
 
-            {/* EMPTY CART */}
+            {/* ================= EMPTY CART ================= */}
 
             {cart.length === 0 ? (
 
@@ -469,8 +520,6 @@ export default function Page() {
 
                           </div>
 
-                          {/* ITEM TOTAL */}
-
                           <p className="font-semibold text-[#39423b]">
                             ₹
                             {(
@@ -482,15 +531,18 @@ export default function Page() {
                         </div>
 
                       </div>
+
                     </div>
+
                   </article>
 
                 ))}
 
               </div>
+
             )}
 
-            {/* LOWER CONTINUE SHOPPING */}
+            {/* CONTINUE SHOPPING */}
 
             <Link
               href="/menu"
@@ -513,7 +565,6 @@ export default function Page() {
 
               <div className="flex justify-between text-sm text-[#6f786f]">
                 <span>Subtotal</span>
-
                 <span>
                   ₹{subtotal.toFixed(0)}
                 </span>
@@ -521,7 +572,6 @@ export default function Page() {
 
               <div className="flex justify-between text-sm text-[#6f786f]">
                 <span>Tax</span>
-
                 <span>
                   ₹{tax.toFixed(0)}
                 </span>
@@ -572,8 +622,6 @@ export default function Page() {
 
           </div>
 
-          {/* ACTUAL MENU PRODUCTS */}
-
           {recommend.length > 0 ? (
 
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -585,7 +633,7 @@ export default function Page() {
                   className="overflow-hidden rounded-3xl border border-[#ddd7ca] bg-[#fbf7ef] transition duration-300 hover:-translate-y-1 hover:shadow-md"
                 >
 
-                  {/* PRODUCT IMAGE */}
+                  {/* IMAGE */}
 
                   <div className="h-40 w-full overflow-hidden bg-[#e1e6dc]">
 
@@ -607,7 +655,7 @@ export default function Page() {
 
                   </div>
 
-                  {/* PRODUCT INFO */}
+                  {/* INFO */}
 
                   <div className="p-5">
 
@@ -633,7 +681,7 @@ export default function Page() {
 
                     </div>
 
-                    {/* ADD TO CART */}
+                    {/* ADD */}
 
                     <button
                       type="button"
@@ -678,6 +726,7 @@ export default function Page() {
         </section>
 
       </div>
+
     </main>
   );
 }
