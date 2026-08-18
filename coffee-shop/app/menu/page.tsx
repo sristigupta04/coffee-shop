@@ -52,8 +52,7 @@ export default function Menu(){
   
     const saved = JSON.parse(localStorage.getItem("cart") || "[]");
 
-    const exist = saved.find((item:Product)=>
-    item.id === product.id);
+    const exist = saved.find((item: Product) => item.id === product.id);
     let update;
     
     if( exist){
@@ -61,8 +60,7 @@ export default function Menu(){
       update= saved.map((item:Product)=>
       item.id === product.id ?{
         ...item,
-        quantity: item.quantity + quant,
-      }
+quantity: (item.quantity ?? 0) + quant,      }
       :item
     );
     }
