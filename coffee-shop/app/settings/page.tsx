@@ -19,7 +19,7 @@ export default function Setting(){
 
          }
         
-    },[page]);
+    },[param]);
 
 
     return(

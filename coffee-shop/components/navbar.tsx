@@ -4,6 +4,7 @@ import Link from "next/link";
 import  Search from "@/components/searchBar";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+
 import {
   Home,
   Coffee,
@@ -13,6 +14,7 @@ import {
 
 
   LogIn,
+  Settings,
 } from "lucide-react";
 
 export default function Navbar() {
@@ -47,6 +49,7 @@ return () => {
   return null;
 }
 
+<Search />
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[#eadbc9] bg-[#fffaf3] shadow-sm">
@@ -78,6 +81,13 @@ return () => {
 <Search/>
 
        
+
+
+<NavItem
+  href="/settings"
+  icon={<Settings size={18} />}
+  text="Settings"
+/>
 
           {/* Cart */}
           <Link

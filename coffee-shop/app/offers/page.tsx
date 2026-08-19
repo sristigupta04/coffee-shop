@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+
 import Offer from "../../components/offers/card";
 
 type Offer ={
@@ -13,10 +14,10 @@ type Offer ={
     code:string;
 }
 type OfferProp ={
-    offer:Offer[];
+    offerProps:Offer[];
 }
 
-export default function Offers({ offer }:OfferProp){
+export default function Offers(){
     const [card , setcard] = useState<Offer[]>([
          {
         id: 1,
@@ -67,8 +68,8 @@ export default function Offers({ offer }:OfferProp){
   <div className="mt-8 space-y-4">
 
     {card.map((offer) => (
-        <Offer key={offer.id} offer={offer} onApply={Apply} onCopyCode={copy} />
-        className="rounded-2xl bg-white p-5 shadow-sm"
+        <Offer key={offer.id} offer={offer} onApply={Apply} onCopyCode={copy} 
+        className="rounded-2xl bg-white p-5 shadow-sm"/>
     ))}
     </div>
 </div>

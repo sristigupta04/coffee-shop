@@ -1,3 +1,4 @@
+"use client";
 import { useState } from "react";
 import Setting from "../../../components/setting/Setting";
 export default function Personal(){

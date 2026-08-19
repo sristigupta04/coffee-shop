@@ -3,15 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 // GET All Products
 
-type params ={
-  params: Promise<{id:string}>
-}
 export async function GET() {
   try {
     const products = await prisma.product.findMany({
       where:{
         isAvailable:true,
-      }
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
     return NextResponse.json(
@@ -49,11 +49,12 @@ export async function POST(req: NextRequest) {
 
     // Validation
     if (
-      !name ||
+     !name ||
       !description ||
-      !price ||
-      !image||
-      !category 
+      price === undefined ||
+      price === null ||
+      !image ||
+      !category
     ) {
       return NextResponse.json(
         {
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         description,
-        price,
+        price:Number(price),
         image,
         category,
         stock:Number(stock) ||0,

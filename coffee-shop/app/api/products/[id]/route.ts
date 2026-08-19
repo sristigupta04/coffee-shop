@@ -46,9 +46,12 @@ catch(error) {
 export async function PUT(req: NextRequest, {params}:params){
   try{
     const body = await req.json();
-    const {name,description,price,category,image} = body;
+    const {name,description,price,category,stock,image} = body;
     const {id} = await params;
       if(!id){
+        if(!id){
+
+        
         return NextResponse.json(
           {
             success: false,
@@ -58,7 +61,7 @@ export async function PUT(req: NextRequest, {params}:params){
         );
       }
 
-      
+    }
       const val = await prisma.product.findUnique({
         where:{
           id:id
@@ -74,18 +77,20 @@ export async function PUT(req: NextRequest, {params}:params){
         );
       }
 
+
           
         const update = await prisma.product.update({
     where:{
       id:id
     },
     data:{
-      name:name,
-      description:description,
-      price: Number(price),
-      category:category,
-      image:image,
-      stock:Number(body.stock) || val.stock,
+      name:name ?? val.name,
+
+      description:description ?? val.description,
+      price: price !== undefined && price !== null ? Number(price) : val.price,
+      category:category ?? val.category,
+      image:image ?? val.image,
+      stock:stock !== undefined  ? Number(stock) : val.stock,
       isAvailable:body.isAvailable ?? val.isAvailable,
     }});
 
