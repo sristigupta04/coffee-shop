@@ -1,6 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-
+import { getcurrentuser } from "@/app/lib/auth";
 // GET All Products
 
 export async function GET() {
@@ -36,6 +36,26 @@ export async function GET() {
 // Add Product
 export async function POST(req: NextRequest) {
   try {
+    const user = await getcurrentuser(req);
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        { status: 401 }
+      );
+    }
+if(!user.role || user.role !== "ADMIN"){
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Forbidden",
+    },
+    { status: 403 }
+  );
+}
+
     const body = await req.json();
 
     const {

@@ -10,7 +10,7 @@ type param ={
 export  async function  GET(req:NextRequest){
     
         try{
-            const userId = req.headers.get("userId");
+const userId = req.cookies.get("userId")?.value;
             if(!userId){
                 return  NextResponse.json({
                     success:false,

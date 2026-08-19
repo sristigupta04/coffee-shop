@@ -231,12 +231,12 @@ const [ secure] = useState<Security[]>([
                                         <button onClick={() => logout(session.id)} className="rounded-md border border-red-500 px-4 py-2 text-sm text-red-600">Logout</button>
                                     )}
                                 </div>
-                                
-            
+        
             ))}
 
     
-
+                        
+            </div>
         </section>
 
         {/* LOGIN ACTIVITY */}

@@ -5,12 +5,18 @@ import Link from "next/link";
 
 type Cart = {
   id: string;
-  name: string;
-  price: number;
-  description: string;
-  imageUrl: string;
   quantity: number;
-};
+  price: number;
+  product:{
+    id:string;
+    name:string;
+    description:string;
+    image:string;
+    price:number;
+  }
+  }
+
+
 
 type Product = {
   id: string;
@@ -24,151 +30,114 @@ type Product = {
 
 export default function Page() {
   const [cart, setcart] = useState<Cart[]>([]);
-  const [recommend, setRecommend] = useState<Cart[]>([]);
-  const [allProducts, setAllProducts] = useState<Cart[]>([]);
+  const [recommend, setRecommend] = useState<Cart[]>([
+       
+  ]);
+  const [allProducts, setAllProducts] = useState<Cart[]>([
+
+  ]);
   const [load, setload] = useState(true);
 
   useEffect(() => {
-    const saved: Cart[] = JSON.parse(
-      localStorage.getItem("cart") || "[]"
-    );
-
-    setcart(saved);
-
-    const getProducts = async () => {
-      try {
-        const res = await fetch("/api/products");
-
-        if (!res.ok) {
-          throw new Error("Products fetch failed");
-        }
-
-        const data = await res.json();
-
-        const products: Product[] = Array.isArray(data)
-          ? data
-          : data.products || data.data || [];
-
-        // =========================
-        // FORMAT ALL MENU PRODUCTS
-        // =========================
-
-        const formattedProducts: Cart[] = products
-          .filter(
-            (product) =>
-              product.isAvailable !== false
-          )
-          .map((product) => ({
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            description:
-              product.description || "",
-            imageUrl:
-              product.imageUrl ||
-              product.image ||
-              "",
-            quantity: 1,
-          }));
-
-        // IMPORTANT:
-        // Store ALL menu products
-        setAllProducts(formattedProducts);
-
-        // =========================
-        // FIRST 3 RECOMMENDATIONS
-        // =========================
-
-        const recommended = formattedProducts
-          .filter(
-            (product) =>
-              !saved.some(
-                (item) => item.id === product.id
-              )
-          )
-          .slice(0, 3);
-
-        setRecommend(recommended);
-
-      } catch (error) {
-        console.error(
-          "Recommendation error:",
-          error
-        );
-      } finally {
-        setload(false);
+    const getData = async () =>{
+      try{
+        const userId =  localStorage.getItem("userId");
+        if(!userId){
+           setload(false);
+           return;
+      } 
+      const res = await fetch("/api/cart", {
+                headers:{
+                  userId,
+                }
+      })
+      const cartdata = await res.json();
+      if(!res.ok){
+        throw new Error(cartdata.message || "Failed to fetch cart");
+        
       }
-    };
+    
+ 
+const cartItems = cartdata.data?.items || [];
 
-    getProducts();
-  }, []);
+      setcart(cartdata.data);
+const productsRes = await fetch("/api/products");
+const productsData = await productsRes.json();
+if(!productsRes.ok){
+  throw new Error(productsData.message || "Failed to fetch products");
+}
+const products: Product[] =  productsData.data || [];
 
-  // =========================
-  // TOTAL ITEMS
-  // =========================
 
+
+  const formattedProducts = products.filter(
+    (product)=> product.isAvailable !== false );
+    setAllProducts(formattedProducts);
+
+  
+const recommended = formattedProducts.filter((product )=>
+  !cartItems.some((item) => item.id === product.id)
+).slice(0, 3);
+
+setRecommend(recommended);
+
+}catch(error){
+  console.error("Recommendation error:", error);
+
+}finally{
+  setload(false);
+}
+};
+
+ getData();
+},[]);
+        
   const totalItems = cart.reduce(
     (acc, item) => acc + item.quantity,
     0
   );
 
-  // =========================
-  // SUBTOTAL
-  // =========================
-
+  
   const subtotal = cart.reduce(
     (acc, item) =>
       acc + item.price * item.quantity,
     0
   );
 
-  // =========================
-  // TAX
-  // =========================
+
 
   const tax = subtotal * 0.05;
 
-  // =========================
-  // GRAND TOTAL
-  // =========================
 
   const grandTotal = subtotal + tax;
 
-  // =========================
-  // CART EVENT
-  // =========================
-
+  
   const cartChanged = () => {
     window.dispatchEvent(
       new Event("cartUpdated")
     );
   };
 
-  // =========================
-  // REMOVE
-  // =========================
 
-  const remove = (id: string) => {
-    const update = cart.filter(
-      (item) => item.id !== id
-    );
-
-    setcart(update);
-
-    localStorage.setItem(
-      "cart",
-      JSON.stringify(update)
-    );
-
+const remove = async (id:string)=>{
+  try{
+    const res = await fetch(`/api/cart/${id}`, {
+      method:"DELETE",
+    });
+    const data = await res.json();
+    if(!res.ok){
+      throw new Error(data.message || "Failed to remove item from cart");
+    }
+    setcart((prev) =>prev.filter((items) => items.id !== id));
     cartChanged();
-  };
-
-  // =========================
-  // INCREASE
-  // =========================
-
-  const add = (id: string) => {
-    const update = cart.map((item) =>
+  }catch(error){
+    console.error("Error removing item from cart:", error);
+  }
+  }
+   
+  const add = async (id: string) => {
+    
+    const item = cart.find((item) =>
       item.id === id
         ? {
             ...item,
@@ -176,140 +145,122 @@ export default function Page() {
           }
         : item
     );
-
-    setcart(update);
-
-    localStorage.setItem(
-      "cart",
-      JSON.stringify(update)
-    );
-
-    cartChanged();
-  };
-
-  // =========================
-  // DECREASE
-  // =========================
-
-  const subtract = (id: string) => {
-    const update = cart.map((item) =>
-      item.id === id && item.quantity > 1
-        ? {
-            ...item,
-            quantity: item.quantity - 1,
-          }
+if(!item){
+  return;
+}
+try{
+  const res = await fetch(`/api/cart/${id}`, {
+    method:"PUT",
+    headers:{
+      "Content-Type":"application/json",
+    },
+    body:JSON.stringify({quantity:item.quantity + 1}),
+  });
+  const data = await res.json();
+  if(!res.ok){
+    throw new Error(data.message || "Failed to update item quantity");
+  }
+  setcart((prev) =>
+    prev.map((item) =>
+      item.id === id
+        ? { ...item, quantity: item.quantity + 1 }
         : item
-    );
+    )
+  );
+  cartChanged();
+} catch (error) {
+  console.error("Error updating item quantity:", error);
+}
+  }
 
-    setcart(update);
 
-    localStorage.setItem(
-      "cart",
-      JSON.stringify(update)
-    );
+  const subtract = async ( id: string ) => {
+    const item = cart.find( (item) => item.id === id );
 
-    cartChanged();
-  };
-
-  // =========================
-  // CLEAR
-  // =========================
-
-  const clear = () => {
-    setcart([]);
-
-    localStorage.removeItem("cart");
-
-    cartChanged();
-  };
-
-  // =========================
-  // ADD RECOMMENDED
-  // =========================
-
-  const addRecommended = (product: Cart) => {
-    const existing = cart.find(
-      (item) => item.id === product.id
-    );
-
-    let update: Cart[];
-
-    // Already in cart
-    if (existing) {
-      update = cart.map((item) =>
-        item.id === product.id
-          ? {
-              ...item,
-              quantity: item.quantity + 1,
-            }
-          : item
-      );
-    } else {
-      // New product
-      update = [
-        ...cart,
-        {
-          ...product,
-          quantity: 1,
-        },
-      ];
+    if (!item || item.quantity <= 1) {
+      return;
     }
 
-    // =========================
-    // UPDATE CART
-    // =========================
-
-    setcart(update);
-
-    localStorage.setItem(
-      "cart",
-      JSON.stringify(update)
-    );
-
-    cartChanged();
-
-    // =========================
-    // REMOVE CLICKED PRODUCT
-    // + ADD NEXT PRODUCT
-    // =========================
-
-    setRecommend((prev) => {
-      const remaining = prev.filter(
-        (item) => item.id !== product.id
+    try {
+      const res = await fetch( `/api/cart/${id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type":"application/json",
+          },
+          body: JSON.stringify({ quantity: item.quantity - 1 }),
+        }
       );
 
-      // Find next product from ALL MENU PRODUCTS
-      const nextProduct = allProducts.find(
-        (item) =>
-          // Not already in cart
-          !update.some(
-            (cartItem) =>
-              cartItem.id === item.id
-          ) &&
-          // Not already showing
-          !remaining.some(
-            (recItem) =>
-              recItem.id === item.id
-          )
-      );
+      const data =  await res.json();
 
-      // Immediately replace recommendation
-      if (nextProduct) {
-        return [
-          ...remaining,
-          nextProduct,
-        ];
+      if (!res.ok) {
+        throw new Error( data.message || "Failed to update quantity" );
       }
 
-      return remaining;
-    });
+      setcart((prev) =>  prev.map((item) => item.id === id  ? {
+                ...item,quantity:
+                  item.quantity - 1,
+              }
+            : item
+        )
+      );
+
+      cartChanged();
+    } catch (error) {
+      console.error("DECREASE CART ERROR:",error);
+    }
   };
 
-  // =========================
-  // LOADING
-  // =========================
+  const clear = async () =>{
+    try{
+      const items = [...cart];
+      await Promise.all(items.map((item) => fetch(`/api/cart/${item.id}`, {
+        method:"DELETE",
+      })));
+      setcart([]);
+      cartChanged();
+    }catch(error){
+      console.error("Error clearing cart:", error);
+    }
+      
+  }
+  const addRecommended = async(product:Product)=>{
+    try{
+      const userId = localStorage.getItem("userId");
+      if(!userId){
+        alert("Please log in to add items to the cart.");
+        return;
+      }
+      const res = await fetch("/api/cart", {
+        method:'POST',
+        headers:{
+          "Content-Type":"application/json",
+        },
+        body:JSON.stringify({userId, productId:product.id, quantity:1}),
+      });
+      const data = await res.json();
+      if(!res.ok){
+        throw new Error(data.message || "Failed to add item to cart");
+      }
+      const cartRes = await fetch("/api/cart", {
+        headers:{userId,}
+      });
+      const cartData = await cartRes.json();
+      if(cartRes.ok){
+        const newCart = cartData.data?.items || [];
+        setcart(newCart);
+      }
+      const newRecommend = allProducts.filter((item)=> !newCart.some((cartItem:cart)=> cartItem.product.id === item.id)).slice(0,3);
+      setRecommend(newRecommend);
+      cartChanged();
+    }catch(error){
+      console.error("Error adding recommended item to cart:", error)
+    }
+      
+    }
+  
 
-  if (load) {
+ if (load) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f5f0e7]">
         <p className="text-[#40594b]">
@@ -318,6 +269,7 @@ export default function Page() {
       </main>
     );
   }
+
 
   // =========================
   // UI
@@ -427,10 +379,10 @@ export default function Page() {
 
                       <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-[#e1e6dc] sm:h-28 sm:w-28">
 
-                        {item.imageUrl ? (
+                        {item.image ? (
 
                           <img
-                            src={item.imageUrl}
+                            src={item.image}
                             alt={item.name}
                             className="h-full w-full object-cover"
                           />
