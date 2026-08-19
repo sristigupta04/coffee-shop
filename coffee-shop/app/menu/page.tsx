@@ -48,39 +48,34 @@ export default function Menu(){
   },[]);
 
 
-  const addToCart = (product: Product, quant: number) => {
+  const addToCart = async (product: Product, quant: number) => {
   
-    const saved = JSON.parse(localStorage.getItem("cart") || "[]");
-
-    const exist = saved.find((item: Product) => item.id === product.id);
-    let update;
-    
-    if( exist){
-
-      update= saved.map((item:Product)=>
-      item.id === product.id ?{
-        ...item,
-quantity: (item.quantity ?? 0) + quant,      }
-      :item
-    );
+   try{
+    const userId = localStorage.getItem("userId");
+    if(!userId){
+      alert("Please login to add items to the cart.");
+      return;
     }
-      else {
-        update = [
-          ...saved,
-          {
-            id:product.id,
-            name:product.name,
-            price:product.price,
-            description:product.description,
-            imageUrl:product.imageUrl,
-            categoryId:product.categoryId,      
-            quantity:quant,
-          }
-        ]
+    const res =  await  fetch(`/api/cart/${userId}`, {
+      method: "PUT",
+      headers:{
+        "content-type":"application/json",
+      },
+      body: JSON.stringify({
+        userId,
+        productId: product.id,
+        quantity: quant,
+      })
+      });
+      const data = await res.json();
+      if(!data.success){
+        alert(data.message || "Failed to add item to cart.");
+        return;
       }
-      localStorage.setItem("cart", JSON.stringify(update));
       window.dispatchEvent(new Event("cartUpdated"));
-          
+    }catch(err){
+      console.error("Error adding item to cart:", err);
+    }
       
     };
 

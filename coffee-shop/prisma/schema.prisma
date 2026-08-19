@@ -30,6 +30,8 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  carts Cart[]
 }
 
 model Product {
@@ -46,6 +48,8 @@ model Product {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  cartItems CartItem[]
 }
 
 model Order {

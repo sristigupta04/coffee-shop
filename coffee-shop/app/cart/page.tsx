@@ -28,10 +28,6 @@ export default function Page() {
   const [allProducts, setAllProducts] = useState<Cart[]>([]);
   const [load, setload] = useState(true);
 
-  // =========================
-  // GET CART + ALL PRODUCTS
-  // =========================
-
   useEffect(() => {
     const saved: Cart[] = JSON.parse(
       localStorage.getItem("cart") || "[]"
