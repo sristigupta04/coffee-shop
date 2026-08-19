@@ -7,16 +7,10 @@ type Cart = {
   id: string;
   quantity: number;
   price: number;
-  product:{
-    id:string;
-    name:string;
-    description:string;
-    image:string;
-    price:number;
-  }
-  }
-
-
+  name: string;
+  description: string;
+  image: string;
+};
 
 type Product = {
   id: string;
@@ -30,12 +24,8 @@ type Product = {
 
 export default function Page() {
   const [cart, setcart] = useState<Cart[]>([]);
-  const [recommend, setRecommend] = useState<Cart[]>([
-       
-  ]);
-  const [allProducts, setAllProducts] = useState<Cart[]>([
-
-  ]);
+const [recommend, setRecommend] = useState<Product[]>([]);
+const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [load, setload] = useState(true);
 
   useEffect(() => {
@@ -60,7 +50,16 @@ export default function Page() {
  
 const cartItems = cartdata.data?.items || [];
 
-      setcart(cartdata.data);
+const formattedCart: Cart[] = cartItems.map((item: any) => ({
+  id: item.id,
+  quantity: item.quantity,
+  price: item.price,
+  name: item.product.name,
+  description: item.product.description,
+  image: item.product.image,
+}));
+
+setcart(formattedCart);
 const productsRes = await fetch("/api/products");
 const productsData = await productsRes.json();
 if(!productsRes.ok){
@@ -74,9 +73,9 @@ const products: Product[] =  productsData.data || [];
     (product)=> product.isAvailable !== false );
     setAllProducts(formattedProducts);
 
-  
+      
 const recommended = formattedProducts.filter((product )=>
-  !cartItems.some((item) => item.id === product.id)
+  !cartItems.some((item:any) => item.id === product.id)
 ).slice(0, 3);
 
 setRecommend(recommended);
@@ -246,12 +245,35 @@ try{
         headers:{userId,}
       });
       const cartData = await cartRes.json();
-      if(cartRes.ok){
-        const newCart = cartData.data?.items || [];
-        setcart(newCart);
-      }
-      const newRecommend = allProducts.filter((item)=> !newCart.some((cartItem:cart)=> cartItem.product.id === item.id)).slice(0,3);
-      setRecommend(newRecommend);
+      const newCart = cartData.data?.items || [];
+     
+if (cartRes.ok) {
+  const formattedCart: Cart[] = newCart.map((item: any) => ({
+    id: item.id,
+    quantity: item.quantity,
+    price: item.price,
+    name: item.product.name,
+    description: item.product.description,
+    image: item.product.image,
+  }));
+
+  setcart(formattedCart);
+}
+
+
+
+
+
+const newRecommend = allProducts
+  .filter(
+    (item) =>
+      !newCart.some(
+        (cartItem: any) =>
+          cartItem.product.id === item.id
+      )
+  )
+  .slice(0, 3); 
+       setRecommend(newRecommend);
       cartChanged();
     }catch(error){
       console.error("Error adding recommended item to cart:", error)

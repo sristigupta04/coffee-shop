@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
     }
 
     const orders = await prisma.order.findMany({
+      where:{
+        userId:user.id,
+      },
       include: {
         items: {
           include: {
@@ -47,6 +50,35 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try{
     const user = await getcurrentuser(req);
+    const body = await req.json();
+const allowedPaymentMethods = ["CASH", "CARD", "ONLINE"];
+const {
+  address,
+  phone,
+  paymentWay,
+} = body;
+
+
+if (!address || !phone || !paymentWay) {
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Address, phone and payment method are required",
+    },
+    { status: 400 }
+  );
+}
+
+
+if (!allowedPaymentMethods.includes(paymentWay)) {
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Invalid payment method",
+    },
+    { status: 400 }
+  );
+}
     if(!user){
       return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
     }
@@ -81,7 +113,10 @@ export async function POST(req: NextRequest) {
           data:{
             userId:user.id,
             totalPrice,
-            status:"pending",
+            status:"PENDING",
+            address,
+            phone,
+            paymentWay,
             items:{
               create:cart.items.map((item)=>({
               productId:item.productId,
@@ -120,6 +155,7 @@ export async function POST(req: NextRequest) {
     return neworder;
   });
   return NextResponse.json({success:true,data:order},{status:201});
+}
   } catch (error) {
     console.error("Order creation error:", error);
     return NextResponse.json(
@@ -130,5 +166,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
 }

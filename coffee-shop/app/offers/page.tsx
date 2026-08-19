@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import Offer from "../../components/offers/card";
 
-type Offer ={
+type OfferType ={
     id:number;
     name:string;
     description:string;
@@ -14,11 +14,11 @@ type Offer ={
     code:string;
 }
 type OfferProp ={
-    offerProps:Offer[];
+    offerProps:OfferType[];
 }
 
 export default function Offers(){
-    const [card , setcard] = useState<Offer[]>([
+    const [card , setcard] = useState<OfferType[]>([
          {
         id: 1,
         name: "20% OFF",
@@ -68,8 +68,12 @@ export default function Offers(){
   <div className="mt-8 space-y-4">
 
     {card.map((offer) => (
-        <Offer key={offer.id} offer={offer} onApply={Apply} onCopyCode={copy} 
-        className="rounded-2xl bg-white p-5 shadow-sm"/>
+        <Offer key={offer.id}
+          className="rounded-2xl bg-white p-5 shadow-sm"
+         offer={offer} 
+         onApply={Apply} 
+         onCopyCode={copy}
+      />
     ))}
     </div>
 </div>

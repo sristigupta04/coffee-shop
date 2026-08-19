@@ -14,6 +14,7 @@ type Props = {
     offer: Offer;
     onApply: (offerId: number) => void;
     onCopyCode: (code: string) => void;
+    className?: string;
 }
 
 

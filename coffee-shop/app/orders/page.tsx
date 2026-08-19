@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
+import Link from "next/link";
 type Orderitem ={
   id:string;
   productId:string;
@@ -35,14 +35,15 @@ export default function Order() {
 console.log("STATUS:", res.status);
 console.log("URL:", res.url);
 
-const text = await res.text();
-console.log("RESPONSE:", text);
+const data = await res.json();
 
 if (!res.ok) {
-  throw new Error(`Orders API failed: ${res.status}`);
+  throw new Error(
+    data.message || "Orders API failed"
+  );
 }
 
-const data = JSON.parse(text);
+setorders(data.data || []);
 console.log("DATA:", data);
       
 
@@ -198,12 +199,12 @@ console.log("DATA:", data);
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[#cdbba9] px-4 py-2 text-sm font-semibold text-[#3b2115] transition hover:bg-[#f8f3ed]"
-                    >
-                      View Order
-                    </button>
+                   <Link
+  href={`/orders/${order.id}`}
+  className="rounded-xl border border-[#cdbba9] px-4 py-2 text-sm font-semibold text-[#3b2115] transition hover:bg-[#f8f3ed]"
+>
+  View Order
+</Link>
                   </div>
 
                 </div>

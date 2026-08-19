@@ -58,9 +58,13 @@ model Order {
   user       User        @relation(fields: [userId], references: [id])
   totalPrice Float
   status     OrderStatus @default(PENDING)
-
+ address    String
+  phone      String
+  paymentWay String
   items       OrderItem[]
-
+ paymentStatus     String      @default("PENDING")
+  razorpayOrderId   String?
+  razorpayPaymentId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
