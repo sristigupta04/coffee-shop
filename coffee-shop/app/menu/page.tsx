@@ -93,7 +93,7 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
 
   <section className="mx-auto max-w-5xl text-center">
 
-    <h1  className="font-[family-name:var(--font-playfair)] text-5xl font-medium text-[#3b2115] md:text-6xl">
+    <h1  className="font-(family-name:--font-playfair) text-5xl font-medium text-[#3b2115] md:text-6xl">
       Our Menu
     </h1>
 

@@ -18,7 +18,7 @@ export default function Checkout({item}:pro){
     const router = useRouter();
     const [address, setAddress] = useState("");
     const [phone, setPhone] = useState("");
-    const [paymentWay, setPaymentWay] = useState("");
+    const [paymentWay, setPaymentWay] = useState("COD");
     const [load ,setload] =useState(false);
 
     const total = item.reduce((acc,item)=>{
@@ -37,10 +37,7 @@ export default function Checkout({item}:pro){
             alert("Cart is empty");
             return;
         }
-        if(item.length < 10){
-            alert("Please add at least 10 items to your cart");
-            return;
-        }
+       
 
         try{
             setload(true);
@@ -202,7 +199,7 @@ export default function Checkout({item}:pro){
                 <span>Subtotal</span>
 
                 <span>
-                  ₹{total.toFixed(0)}
+                  ₹{grandTotal.toFixed(0)}
                 </span>
               </div>
 
@@ -218,7 +215,7 @@ export default function Checkout({item}:pro){
                 <span>Total</span>
 
                 <span>
-                  ₹{total.toFixed(0)}
+                  ₹{grandTotal.toFixed(0)}
                 </span>
               </div>
 

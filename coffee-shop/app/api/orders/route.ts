@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   try{
     const user = await getcurrentuser(req);
     const body = await req.json();
-const allowedPaymentMethods = ["CASH", "CARD", "ONLINE"];
+const allowedPaymentMethods = ["COD", "ONLINE"];
 const {
   address,
   phone,
@@ -104,11 +104,18 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
         return NextResponse.json({success:false,message:`Product ${item.product.name} is not available`},{status:400});
       }
 
+
+
       if(item.quantity > item.product.stock){
         return NextResponse.json({success:false,message:`Product ${item.product.name} does not have enough stock`},{status:400});
       }
+
+
       const totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
+
+
       const order = await prisma.$transaction(async(tx)=>{
+
         const neworder = await tx.order.create({
           data:{
             userId:user.id,
@@ -154,6 +161,8 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
     });
     return neworder;
   });
+
+
   return NextResponse.json({success:true,data:order},{status:201});
 }
   } catch (error) {
