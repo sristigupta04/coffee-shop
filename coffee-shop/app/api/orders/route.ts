@@ -56,14 +56,15 @@ const {
   address,
   phone,
   paymentWay,
+  couponCode
 } = body;
 
 
-if (!address || !phone || !paymentWay) {
+if (!address || !phone || !paymentWay || !couponCode) {
   return NextResponse.json(
     {
       success: false,
-      message: "Address, phone and payment method are required",
+      message: "Address, phone, payment method and coupon code are required",
     },
     { status: 400 }
   );
@@ -112,7 +113,31 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
     }
 
       const totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
+let discountAmount = 0;
+let finalAmount = totalPrice;
 
+if(couponCode.trim()){
+  const coupon = await prisma.coupon.findUnique({
+    where:{
+      code:couponCode.toUpperCase(),
+    },
+  });
+
+  if(!coupon){
+    return NextResponse.json({success:false,message:"Invalid coupon code"},{status:400});
+  }
+  if(coupon.expireDate < new Date()){
+    return NextResponse.json({success:false,message:"Coupon code has expired"},{status:400});
+  }
+  if(!coupon.isActive){
+    return NextResponse.json({success:false,message:"Coupon code is not active"},{status:400});
+  }
+  if(totalPrice < coupon.minimumAmount){
+    return NextResponse.json({success:false,message:`Minimum amount for this coupon is ${coupon.minimumAmount}`},{status:400});
+  }
+  discountAmount = (totalPrice * coupon.discount) / 100;
+  finalAmount = totalPrice - discountAmount;
+}
 
       const order = await prisma.$transaction(async(tx)=>{
 

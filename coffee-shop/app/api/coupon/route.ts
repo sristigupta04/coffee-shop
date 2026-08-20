@@ -18,11 +18,7 @@ try{
 }catch(error){
     return new Response(JSON.stringify({error: "An error occurred while fetching coupon details"}), {status: 500});
 }
-
-};
-
-
-
+}
 export async function POST(req: NextRequest) {
     try{
         const body = await req.json();

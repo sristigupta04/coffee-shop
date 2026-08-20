@@ -12,8 +12,8 @@ const razorpay = new Razorpay({
 export async function POST(req: NextRequest) {
     try{
         const body = await req.json();
-        const {amount} = body;
-        if(!amount || amount <= 0){
+        const {amount,couponCode, discountAmount, finalAmount} = body;
+        if(!amount || amount <= 0 || !finalAmount || finalAmount <= 0){
             return NextResponse.json({message: "Invalid amount"}, {status: 400});
 
         }
