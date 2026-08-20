@@ -109,7 +109,7 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
       if(item.quantity > item.product.stock){
         return NextResponse.json({success:false,message:`Product ${item.product.name} does not have enough stock`},{status:400});
       }
-
+    }
 
       const totalPrice = cart.items.reduce((acc, item) => acc + item.quantity * item.product.price, 0);
 
@@ -142,6 +142,7 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
       });
 
       for (const item of cart.items){
+
       await tx.product.update({
         where:{
            id:item.productId
@@ -164,7 +165,7 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
 
 
   return NextResponse.json({success:true,data:order},{status:201});
-}
+
   } catch (error) {
     console.error("Order creation error:", error);
     return NextResponse.json(
