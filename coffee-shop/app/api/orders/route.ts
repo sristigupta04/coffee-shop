@@ -1,7 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse , NextRequest} from "next/server";
 import { getcurrentuser } from "@/app/lib/auth";
-
+import {createactive} from "@/app/lib/activity";
 
 export async function GET(req: NextRequest) {
   try {
@@ -60,11 +60,11 @@ const {
 } = body;
 
 
-if (!address || !phone || !paymentWay || !couponCode) {
+if (!address || !phone || !paymentWay ) {
   return NextResponse.json(
     {
       success: false,
-      message: "Address, phone, payment method and coupon code are required",
+      message: "Address, phone and payment method are required",
     },
     { status: 400 }
   );
@@ -144,7 +144,7 @@ if(couponCode.trim()){
         const neworder = await tx.order.create({
           data:{
             userId:user.id,
-            totalPrice,
+            totalPrice:finalAmount,
             status:"PENDING",
             address,
             phone,
@@ -166,6 +166,7 @@ if(couponCode.trim()){
         }
       });
 
+      
       for (const item of cart.items){
 
       await tx.product.update({
@@ -187,7 +188,7 @@ if(couponCode.trim()){
     });
     return neworder;
   });
-
+ await createactive(user.id,"Order Created",`Order with ID ${order.id} has been created successfully.`);
 
   return NextResponse.json({success:true,data:order},{status:201});
 

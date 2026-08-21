@@ -9,6 +9,9 @@ type Order ={
     totalPrice:number;
     status:string;
     createdAt:string;
+    adress:string;
+    phone:string;
+    paymentWay:string;
     items:{
         id:string;
         quantity:number;
@@ -56,6 +59,22 @@ export default function OrderPage(){
             </main>
         );
     }
+    if(error){
+        return(
+            <main className="flex min-h-screen flex-col items-center justify-between p-24">
+              <div  className="rounded-3xl bg-white px-6 py-16 text-center shadow-sm">
+                <h1 className="text-2xl font-bold text-[#3b2115]">
+                  Error: {error}
+                </h1>
+                <p className="mt-2 text-[#80695b]">
+                  Unable to fetch order details. Please try again later.
+                </p>
+              </div>
+            </main>
+        );
+    }
+             
+    
     if(!order){
         return(
             <main className="flex min-h-screen flex-col items-center justify-between p-24">
@@ -66,7 +85,7 @@ export default function OrderPage(){
      
     
     return(
-        <main className="min-h-screen  bg-[#f5f07e7] p-6">
+        <main className="min-h-screen  bg-[#f8f3ed] p-6">
  <div className="mx-auto max-w-4xl">
 
         <h1 className="text-4xl font-bold text-[#3b2115]">
@@ -90,6 +109,28 @@ export default function OrderPage(){
           <div className="mt-3 flex justify-between">
             <span>Date</span>
 
+
+<div className="mt-6 grid gap-4 border-t pt-4 sm:grid-cols-2">
+  <div>
+    <p className="text-sm text-[#80695b]">Payment Method</p>
+    <p className="font-semibold text-[#3b2115]">
+      {order.paymentWay}
+    </p>
+  </div>
+  <div>
+    <p className="text-sm text-[#80695b]">Phone</p>
+    <p className="font-semibold text-[#3b2115]">
+      {order.phone}
+    </p>
+  </div>
+  <div className="sm:col-span-2">
+    <p className="text-sm text-[#80695b]">Address</p>
+    <p className="font-semibold text-[#3b2115]">
+      {order.adress}
+    </p>
+  </div>
+
+  </div>
             <span>
               {new Date(
                 order.createdAt

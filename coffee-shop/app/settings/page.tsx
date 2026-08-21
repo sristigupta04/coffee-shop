@@ -150,33 +150,68 @@ className="flex items-center justify-between border-b border-[#eee4da] px-5 py-5
         </section>
 
         {/* Security */}
-        <section className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[#806654]">
-            Security
-          </h2>
+      {/* Security */}
+<section className="mt-8">
+  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[#806654]">
+    Security
+  </h2>
 
-          <a
-            href="/settings/activity"
-            className="flex items-center justify-between rounded-2xl bg-white px-5 py-5 shadow-sm transition hover:bg-[#faf7f3]"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e6eee5] text-xl">
-                🛡️
-              </div>
+  <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
 
-              <div>
-                <h3 className="font-semibold text-[#3b2115]">
-                  Account Activity
-                </h3>
-                <p className="mt-1 text-sm text-[#806654]">
-                  View recent account activity
-                </p>
-              </div>
-            </div>
+    {/* Account Activity */}
+    <a
+      href="/settings/activity"
+      className="flex items-center justify-between border-b border-[#eee4da] px-5 py-5 transition hover:bg-[#faf7f3]"
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e6eee5] text-xl">
+          🛡️
+        </div>
 
-            <span className="text-xl text-[#806654]">›</span>
-          </a>
-        </section>
+        <div>
+          <h3 className="font-semibold text-[#3b2115]">
+            Account Activity
+          </h3>
+
+          <p className="mt-1 text-sm text-[#806654]">
+            View recent account activity
+          </p>
+        </div>
+      </div>
+
+      <span className="text-xl text-[#806654]">
+        ›
+      </span>
+    </a>
+
+    {/* Change Password */}
+    <a
+      href="/settings/password"
+      className="flex items-center justify-between px-5 py-5 transition hover:bg-[#faf7f3]"
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e6eee5] text-xl">
+          🔐
+        </div>
+
+        <div>
+          <h3 className="font-semibold text-[#3b2115]">
+            Change Password
+          </h3>
+
+          <p className="mt-1 text-sm text-[#806654]">
+            Update your account password
+          </p>
+        </div>
+      </div>
+
+      <span className="text-xl text-[#806654]">
+        ›
+      </span>
+    </a>
+
+  </div>
+</section>
 
         {/* Featured */}
         <section className="mt-8">

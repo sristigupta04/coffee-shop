@@ -2,6 +2,7 @@ import {  prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getcurrentuser } from "@/app/lib/auth";
 import bcrypt from "bcrypt";
+import { createActivity } from "@/app/lib/activity";
 
 
 export async function POST(req: NextRequest) {
@@ -12,7 +13,10 @@ if(!user){
 }
 const body = await req.json();
 const {currentPassword,newPassword} = body;
-if(!currentPassword || !newPassword){
+if(typeof currentPassword !== "string" ||
+  typeof newPassword !== "string" ||
+  !currentPassword ||
+  !newPassword){
     return NextResponse.json({success:false,message:"Missing required fields"},{status:400});
 }
 if(newPassword.length < 6){
@@ -40,6 +44,7 @@ if(newPassword.length < 6){
             password:hashedPassword,
         },
     });
+    await createActivity(user.id,"Changed password", "User changed their password successfully");
     return NextResponse.json({success:true,message:"Password changed successfully"},{status:200});
     }
     catch(error){

@@ -1,7 +1,7 @@
 
 
 type Active = {
-    id:number;
+    id:string;
     title:string;
     description:string;
     time:string;

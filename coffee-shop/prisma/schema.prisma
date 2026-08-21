@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" 
   url      = env("DATABASE_URL")
 }
 
@@ -26,12 +26,21 @@ model User {
   password  String
   role      Role     @default(USER)
 
+
+
+notificationEnabled Boolean @default(true)
+orderUpdates       Boolean @default(true)
+promoEmails        Boolean @default(true)
+emailNotifications Boolean @default(true)
+notifications Notification[]
   orders    Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
+paymentMethods PaymentMethod[]
+accountActivities AccountActivity[]
   carts Cart[]
+  
 }
 
 model Product {
@@ -122,4 +131,40 @@ model Coupon {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+
+model PaymentMethod {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  name      String
+  details   String
+  isActive  Boolean  @default(true)
+  cardNumber String
+  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model AccountActivity{
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action   String
+  details   String
+
+  
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

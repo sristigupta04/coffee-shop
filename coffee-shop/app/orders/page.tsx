@@ -47,7 +47,6 @@ setorders(data.data || []);
 console.log("DATA:", data);
       
 
-        setorders(data.data);
       } catch (err) {
         console.error("Error fetching orders:", err);
       } finally {
@@ -80,8 +79,11 @@ console.log("DATA:", data);
           </p>
         </div>
 
-        {/* No Orders */}
-        {orders.length === 0 ? (
+      {load ? (
+        <div className="flex items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#3b2115] border-t-transparent"></div>
+        </div>
+      ) : orders.length === 0 ? (
           <div className="rounded-3xl bg-white px-6 py-16 text-center shadow-sm">
             <div className="text-5xl">☕</div>
 

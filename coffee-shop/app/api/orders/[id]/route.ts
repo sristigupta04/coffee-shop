@@ -94,7 +94,7 @@ const update = await prisma.$transaction(async(tx)=>{
             },
             data:{
                 stock:{
-                    decrement:item.quantity,
+                    increment:item.quantity,
                 }
             }
         });
@@ -109,9 +109,7 @@ if(user.role === "ADMIN"){
  if(!status || !allowedStatuses.includes(status)){
     return NextResponse.json({success:false,message:"Invalid status"},{status:400});
  }
- if(!allowedStatuses.includes(status)){
-    return NextResponse.json({success:false,message:"Invalid status"},{status:400});
- }
+
  const updatedOrder = await prisma.order.update({
     where:{
         id,
