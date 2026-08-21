@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       address,
       phone,
     } = body;
- const user = await getcurrentuser(req);
+ const user = await getcurrentuser();
     if(!user){
       return NextResponse.json(
         {
@@ -65,21 +65,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-
-
-for(const item of cart.items){
-  if(!item.product.isAvailable){
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Product ${item.product.name} is not available`,
-      },
-      { status: 400 }
-    );
-  }
-}
-
-    const cart= await prisma.cart.findUnique({
+ const cart= await prisma.cart.findUnique({
      where:{
         userId:user.id
         },
@@ -100,6 +86,21 @@ for(const item of cart.items){
             { status: 400 }
         );
      }
+
+for(const item of cart.items){
+  
+  if(!item.product.isAvailable){
+    return NextResponse.json(
+      {
+        success: false,
+        message: `Product ${item.product.name} is not available`,
+      },
+      { status: 400 }
+    );
+  }
+}
+
+   
 
     const totalPrice = cart.items.reduce((acc, item) => acc + item.product.price * item.quantity, 0) || 0;
     let finalAmount = totalPrice;

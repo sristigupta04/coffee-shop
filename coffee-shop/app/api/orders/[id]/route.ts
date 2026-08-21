@@ -13,7 +13,7 @@ export async function GET(req:NextRequest,{params}:params){
         if(!id){
             return NextResponse.json({success:false,message:"Missing required fields"},{status:400});
         }
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
         }
@@ -50,7 +50,7 @@ if(!id){
     return NextResponse.json({success:false,message:"Missing required fields"},{status:400});
 }
 
-const user= await getcurrentuser(req);
+const user= await getcurrentuser();
 if(!user){
     return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
 }

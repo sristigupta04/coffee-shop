@@ -1,21 +1,29 @@
-import {    NextRequest } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { auth } from "@/auth";
 
 
-export async  function getcurrentuser(req:NextRequest){
-    const userId = req.cookies.get("userId")?.value;
-    if(!userId){
-        return null;
-    }
+export async  function getcurrentuser(){
+  const session = await auth();
+  if(!session?.user?.id){
+    return null;
+  }
     const user = await prisma.user.findUnique({
         where:{
-            id:userId,  
+            id:session.user.id,  
         },
         select:{
             id:true,
             email:true,
+
+
+
+
+
+            
             name:true,
             role:true,
+            phone: true,
+      image: true
         }
     });
     return user;

@@ -6,7 +6,7 @@ import { createactive } from "@/app/lib/activity";
 
 export async function GET (request:NextRequest){
     try{
-        const user =await getcurrentuser(request);
+        const user =await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
 
@@ -29,14 +29,14 @@ export async function GET (request:NextRequest){
 
     export async function POST(req:NextRequest){
         try{
-            const user = await getcurrentuser(req);
+            const user = await getcurrentuser();
             if(!user){
                 return NextResponse.json({message:"Unauthorized"}, {status:401});
             
             }
             const body = await req.json();
-            const {type, name, details} = body;
-            if(!type || !name || !details){
+            const {type, name, details, cardNumber} = body;
+            if(!type || !name || !details || !cardNumber){
                 return NextResponse.json({message:"Missing required fields"}, {status:400});
             }
 
@@ -57,7 +57,7 @@ export async function GET (request:NextRequest){
                     type,
                     name,
                     details,
-                   
+                   cardNumber,
                     isActive:exist === 0 ? true : false,
                 }
             });

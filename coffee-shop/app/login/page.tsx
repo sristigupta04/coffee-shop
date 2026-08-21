@@ -223,7 +223,7 @@ export default function Login() {
 
                   </div>
                 </div>
-
+                       
                 {/* Login */}
                 <button
                   type="submit"
@@ -235,7 +235,14 @@ export default function Login() {
                 </button>
 
               </form>
-
+                      <div className="mt-2 flex justify-end">
+  <Link
+    href="/forgot-password"
+    className="text-sm font-medium text-[#d27a25] hover:underline"
+  >
+    Forgot Password?
+  </Link>
+</div>
               {/* Divider */}
               <div className="my-6 flex items-center gap-4">
                 <div className="h-px flex-1 bg-[#52372a]" />

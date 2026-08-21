@@ -2,12 +2,12 @@ import {  prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getcurrentuser } from "@/app/lib/auth";
 import bcrypt from "bcrypt";
-import { createActivity } from "@/app/lib/activity";
+import { createactive} from "@/app/lib/activity";
 
 
 export async function POST(req: NextRequest) {
     try{
-const user = await getcurrentuser(req);
+const user = await getcurrentuser();
 if(!user){
     return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
 }
@@ -44,7 +44,7 @@ if(newPassword.length < 6){
             password:hashedPassword,
         },
     });
-    await createActivity(user.id,"Changed password", "User changed their password successfully");
+    await createactive(user.id,"Changed password", "User changed their password successfully");
     return NextResponse.json({success:true,message:"Password changed successfully"},{status:200});
     }
     catch(error){

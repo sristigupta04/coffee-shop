@@ -36,7 +36,7 @@ export async function GET() {
 // Add Product
 export async function POST(req: NextRequest) {
   try {
-    const user = await getcurrentuser(req);
+    const user = await getcurrentuser();
     if (!user) {
       return NextResponse.json(
         {

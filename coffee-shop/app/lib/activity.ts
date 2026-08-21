@@ -7,7 +7,7 @@ export async function createactive (userId:string, action:string, details?:strin
             data:{
                 userId,
                 action,
-                details:details || null,
+                details:details || "",
             }
         });
     }catch(error){

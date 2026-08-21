@@ -5,7 +5,7 @@ import {prisma} from "@/app/lib/prisma";
 export async function GET(req:NextRequest){
 
 try{
-    const user = await getcurrentuser(req);
+    const user = await getcurrentuser();
     if(!user){
         return NextResponse.json({message:"Unauthorized"}, {status:401});
     }
@@ -32,7 +32,7 @@ try{
 
 export async function DELETE(req:NextRequest){
     try{
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }

@@ -44,4 +44,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
+
+  callbacks: {
+    async jwt({token}){
+      if(token.email){
+        const user = await prisma.user.findUnique({
+          where: {
+            email: token.email,
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        
+        });
+        if(user){
+          token.userId = user.id.toString();
+        }
+      }
+            return token;
+      },
+      async session({session, token}){
+        if(session.user && token.userId){
+          session.user.id = token.userId as string;
+        }
+        return session;
+      },
+    },
 });

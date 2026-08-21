@@ -9,7 +9,7 @@ type Order ={
     totalPrice:number;
     status:string;
     createdAt:string;
-    adress:string;
+    address:string;
     phone:string;
     paymentWay:string;
     items:{
@@ -105,10 +105,13 @@ export default function OrderPage(){
               {order.status}
             </span>
           </div>
+<div className="mt-3 flex justify-between">
+  <span>Date</span>
 
-          <div className="mt-3 flex justify-between">
-            <span>Date</span>
-
+  <span>
+    {new Date(order.createdAt).toLocaleDateString()}
+  </span>
+</div>
 
 <div className="mt-6 grid gap-4 border-t pt-4 sm:grid-cols-2">
   <div>
@@ -117,20 +120,24 @@ export default function OrderPage(){
       {order.paymentWay}
     </p>
   </div>
+
   <div>
     <p className="text-sm text-[#80695b]">Phone</p>
     <p className="font-semibold text-[#3b2115]">
       {order.phone}
     </p>
   </div>
+
   <div className="sm:col-span-2">
     <p className="text-sm text-[#80695b]">Address</p>
     <p className="font-semibold text-[#3b2115]">
-      {order.adress}
+      {order.address}
     </p>
   </div>
+</div>
 
-  </div>
+
+          <div className="mt-6 flex justify-between">
             <span>
               {new Date(
                 order.createdAt

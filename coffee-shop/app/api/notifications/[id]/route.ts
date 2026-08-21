@@ -8,7 +8,7 @@ type params ={
 export async function GET(req:NextRequest, {params}:params){
     try{
         const {id} = await params;
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
@@ -19,7 +19,7 @@ export async function GET(req:NextRequest, {params}:params){
             return NextResponse.json({message:"Invalid request body"}, {status:400});
         }
 
-            const notifications = await prisma.Notification.FindFirst({
+            const notifications = await prisma.notification.findFirst({
                 where:{
                     id,
                     userId:user.id,
@@ -31,7 +31,7 @@ export async function GET(req:NextRequest, {params}:params){
         if(!notifications){
             return NextResponse.json({message:"Notification not found"}, {status:404});
         }
-        const update = await prisma.Notification.update({
+        const update = await prisma.notification.update({
             where:{
                 id,
             },
@@ -52,11 +52,11 @@ export async function GET(req:NextRequest, {params}:params){
  export async function DELETE(req:NextRequest, {params}:params){
     try{
         const {id}  = await params;
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
-        const notifications = await prisma.Notification.findFirst({
+        const notifications = await prisma.notification.findFirst({
             where:{
                 id,
                 userId:user.id,
@@ -65,7 +65,7 @@ export async function GET(req:NextRequest, {params}:params){
         if(!notifications){
             return NextResponse.json({message:"Notification not found"}, {status:404});
         }
-        await prisma.Notification.delete({
+        await prisma.notification.delete({
             where:{
                 id,
             },

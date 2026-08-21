@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import MenuCard from "@/components/Menu/MenuCard";
 import  Store from "@/components/Menu/StoreBar";
 import Categoryhead from "@/components/Menu/categoryNav";
@@ -22,6 +23,8 @@ export default function Menu(){
   const [category, setCategory] = useState("All");
   const searchParams = useSearchParams();
   const searchTerm = searchParams.get("search") || "";
+  const { status, data: session } = useSession();
+
   useEffect(()=>{
     const prod = async()=>{
       try{
@@ -51,11 +54,14 @@ export default function Menu(){
   const addToCart = async (product: Product, quant: number) => {
   
    try{
-    const userId = localStorage.getItem("userId");
-    if(!userId){
-      alert("Please login to add items to the cart.");
+    if(status === "loading"){
       return;
     }
+    if(status !== "authenticated" || !session?.user?.id){
+      alert("Please log in to add items to your cart.");
+      return;
+    }
+    const userId = session.user.id;
     const res =  await  fetch(`/api/cart/${userId}`, {
       method: "PUT",
       headers:{

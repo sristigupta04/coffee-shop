@@ -25,7 +25,8 @@ model User {
   email     String   @unique
   password  String
   role      Role     @default(USER)
-
+phone     String?
+  image     String? 
 
 
 notificationEnabled Boolean @default(true)
@@ -136,11 +137,12 @@ model Coupon {
 
 model PaymentMethod {
   id        String   @id @default(cuid())
+  name      String
+  details   String
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   type      String
-  name      String
-  details   String
+  
   isActive  Boolean  @default(true)
   cardNumber String
   

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
+import { useSession } from "next-auth/react";
 type Cart = {
   id: string;
+  productId: string;
   quantity: number;
   price: number;
   name: string;
@@ -27,16 +28,21 @@ export default function Page() {
 const [recommend, setRecommend] = useState<Product[]>([]);
 const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [load, setload] = useState(true);
+const {status, data: session} = useSession();
+
 
   useEffect(() => {
     const getData = async () =>{
       try{
-        const userId =  localStorage.getItem("userId");
-        if(!userId){
-           setload(false);
-           return;
-      } 
-      const res = await fetch("/api/cart", {
+        if(status === "loading"){
+          return;
+        }
+      if(status !== "authenticated" || !session?.user?.id){
+        setload(false);
+        return;
+      }
+      const userId = session.user.id;
+      const res = await fetch(`/api/cart/${userId}`, {
                 headers:{
                   userId,
                 }
@@ -53,6 +59,7 @@ const cartItems = cartdata.data?.items || [];
 const formattedCart: Cart[] = cartItems.map((item: any) => ({
   id: item.id,
   quantity: item.quantity,
+  productId: item.productId,
   price: item.price,
   name: item.product.name,
   description: item.product.description,
@@ -89,7 +96,7 @@ setRecommend(recommended);
 };
 
  getData();
-},[]);
+},[status, session]);
         
   const totalItems = cart.reduce(
     (acc, item) => acc + item.quantity,
@@ -120,8 +127,18 @@ setRecommend(recommended);
 
 const remove = async (id:string)=>{
   try{
-    const res = await fetch(`/api/cart/${id}`, {
+    if(status !== "authenticated" || !session?.user?.id){
+      alert("Please log in to remove items from your cart.");
+      return;
+    }
+    const userId = session.user.id;
+    
+    const res = await fetch(`/api/cart/${userId}`, {
       method:"DELETE",
+      headers:{
+        "Content-Type":"application/json",
+      },
+      body:JSON.stringify({cartItemId:id}),
     });
     const data = await res.json();
     if(!res.ok){
@@ -144,16 +161,16 @@ const remove = async (id:string)=>{
           }
         : item
     );
-if(!item){
+if(!item || status !== "authenticated" || !session?.user?.id){
   return;
 }
 try{
-  const res = await fetch(`/api/cart/${id}`, {
+  const res = await fetch(`/api/cart/${session.user.id}`, {
     method:"PUT",
     headers:{
       "Content-Type":"application/json",
     },
-    body:JSON.stringify({quantity:item.quantity + 1}),
+    body:JSON.stringify({productId: item.productId, quantity:item.quantity + 1}),
   });
   const data = await res.json();
   if(!res.ok){
@@ -176,17 +193,20 @@ try{
   const subtract = async ( id: string ) => {
     const item = cart.find( (item) => item.id === id );
 
-    if (!item || item.quantity <= 1) {
-      return;
-    }
+   if (!item || status !== "authenticated" || !session?.user?.id) {
+  return;
+}
+
+const userId = session.user.id;
 
     try {
-      const res = await fetch( `/api/cart/${id}`, {
+
+      const res = await fetch( `/api/cart/${session.user.id}`, {
           method: "PUT",
           headers: {
             "Content-Type":"application/json",
           },
-          body: JSON.stringify({ quantity: item.quantity - 1 }),
+          body: JSON.stringify({productId: item.productId, quantity: item.quantity - 1 }),
         }
       );
 
@@ -212,9 +232,19 @@ try{
 
   const clear = async () =>{
     try{
+      if(status !== "authenticated" || !session?.user?.id){
+        alert("Please log in to clear your cart.");
+        return;
+      }
+      const userId = session.user.id;
+
       const items = [...cart];
-      await Promise.all(items.map((item) => fetch(`/api/cart/${item.id}`, {
+      await Promise.all(items.map((item) => fetch(`/api/cart/${userId}`, {
         method:"DELETE",
+        headers:{
+          "Content-Type":"application/json",
+        },
+        body:JSON.stringify({cartItemId:item.id}),
       })));
       setcart([]);
       cartChanged();
@@ -225,23 +255,23 @@ try{
   }
   const addRecommended = async(product:Product)=>{
     try{
-      const userId = localStorage.getItem("userId");
-      if(!userId){
-        alert("Please log in to add items to the cart.");
-        return;
-      }
-      const res = await fetch("/api/cart", {
-        method:'POST',
+     if(status !== "authenticated" || !session?.user?.id){
+       alert("Please log in to add items to your cart.");
+       return;
+     }
+     const userId = session.user.id;
+      const res = await fetch(`/api/cart/${userId}`, {
+        method:'PUT',
         headers:{
           "Content-Type":"application/json",
         },
-        body:JSON.stringify({userId, productId:product.id, quantity:1}),
+        body:JSON.stringify({productId:product.id, quantity:1}),
       });
       const data = await res.json();
       if(!res.ok){
         throw new Error(data.message || "Failed to add item to cart");
       }
-      const cartRes = await fetch("/api/cart", {
+      const cartRes = await fetch(`/api/cart/${userId}`, {
         headers:{userId,}
       });
       const cartData = await cartRes.json();
@@ -565,12 +595,12 @@ const newRecommend = allProducts
 
             </div>
 
-            <button
-              type="button"
-              className="mt-7 w-full rounded-full bg-[#40594b] py-4 text-sm font-semibold text-white transition hover:bg-[#33483c]"
-            >
-              Checkout →
-            </button>
+           <Link
+  href="/checkout"
+  className="mt-7 block w-full rounded-full bg-[#40594b] py-4 text-center text-sm font-semibold text-white transition hover:bg-[#33483c]"
+>
+  Checkout →
+</Link>
 
           </aside>
 

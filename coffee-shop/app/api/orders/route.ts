@@ -5,7 +5,7 @@ import {createactive} from "@/app/lib/activity";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getcurrentuser(req);
+    const user = await getcurrentuser();
     if (!user) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try{
-    const user = await getcurrentuser(req);
+    const user = await getcurrentuser();
     const body = await req.json();
 const allowedPaymentMethods = ["COD", "ONLINE"];
 const {

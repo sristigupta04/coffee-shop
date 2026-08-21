@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { success } from "zod";
+import  {auth}  from "@/auth";
 
 type param ={
   params: Promise<{id:string}>
@@ -10,16 +10,16 @@ type param ={
 export  async function  GET(req:NextRequest){
     
         try{
-const userId = req.cookies.get("userId")?.value;
-            if(!userId){
-                return  NextResponse.json({
-                    success:false,
-                    message:"userId is required in header",
-                },{status:400});
-            }
-                
+           const session  = await auth();
+           if(!session?.user?.email){
+            return NextResponse.json({
+                success:false,
+                message:"unauthorized",
+            },{status:401});
+           } 
             
-        
+            const userId = session.user.id;
+
            
             const cartitem = await prisma.cart.findUnique({
                 where:{
@@ -67,12 +67,22 @@ const userId = req.cookies.get("userId")?.value;
 export async function POST(req:NextRequest){
 
         try{
-            const body = await req.json();
-            const {userId,productId,quantity} = body;
-            if(!userId || !productId || !quantity){
+            const session  = await auth();
+            if(!session?.user?.email){
                 return NextResponse.json({
                     success:false,
-                    message:"userId,productId and quantity are required",
+                    message:"unauthorized",
+                },{status:401});
+            }
+            const userId = session.user.id;
+
+            const body = await req.json();
+
+            const {productId,quantity} = body;
+            if( !productId || !quantity){
+                return NextResponse.json({
+                    success:false,
+                    message:"productId and quantity are required",
                 },{status:400});
             }
 
@@ -91,12 +101,7 @@ export async function POST(req:NextRequest){
 
 
             }
-            if(!product.isAvailable){
-                return NextResponse.json({
-                    success:false,
-                    message:"product is not available",
-                },{status:400});
-            }
+           
 
 
             const cart = await prisma.cart.upsert({
@@ -105,13 +110,17 @@ export async function POST(req:NextRequest){
       },
       update: {},
       create: {
-        userId,
+        user:{
+            connect: {
+                id:userId,
+            }
+        }
       },
     });
             const exist = await prisma.cartItem.findUnique({
                 where:{
                     cartId_productId:{
-                        cartId:userId,
+                        cartId:cart.id,
                         productId:productId
                     }
                 }

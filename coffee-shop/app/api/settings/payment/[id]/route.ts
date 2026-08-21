@@ -11,7 +11,7 @@ type Params = {
 export async function GET(req:NextRequest, {params}:Params){
     try{
         const {id} = await params;
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
@@ -42,7 +42,7 @@ if(!payment){
 export async function PATCH(req:NextRequest, {params}:Params){
     try{
         const {id} = await params;
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
@@ -99,7 +99,7 @@ export async function PATCH(req:NextRequest, {params}:Params){
 export async function DELETE(req:NextRequest, {params}:Params){
     try{
         const {id} = await params;
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }

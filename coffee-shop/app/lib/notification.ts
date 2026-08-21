@@ -4,12 +4,12 @@ export async function GET(userId:string, title:string, message:string , type?:st
 
 
     try{
-        const notifications = await prisma.Notification.create({
+        const notifications = await prisma.notification.create({
                 data:{
                     userId,
                     title,
                     message,
-                    type:type|| "GENERAL",
+                
                 },
             });
             return notifications;

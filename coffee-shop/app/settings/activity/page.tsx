@@ -76,7 +76,7 @@ const handleClear = async ()=>{
     }finally{
         setclear(false);
     }
-
+  };
     const today = new Date();
     const todayactive = active.filter((act)=> {const date = new Date(act.createdAt); 
         return(

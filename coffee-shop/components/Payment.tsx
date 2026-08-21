@@ -69,7 +69,7 @@ const [page, setPage] = useState<Pay[]>([]);
     }finally{
         setSaving(false);
     }
-
+  };
 
     const handleActive = async(id:string) =>{
         try{

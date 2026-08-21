@@ -5,11 +5,11 @@ import { getcurrentuser } from "@/app/lib/auth";
 
 export async function GET(req: NextRequest) {
     try{
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
-        const notifications = await prisma.Notification.findMany({
+        const notifications = await prisma.notification.findMany({
             where:{
                 userId:user.id,
             },
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
                 createdAt:"desc",
             },
         });
-        const unreadCount = await prisma.Notification.count({
+        const unreadCount = await prisma.notification.count({
             where:{
                 userId:user.id,
                 isRead:false,
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try{
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
@@ -44,12 +44,11 @@ export async function POST(req: NextRequest) {
         if(!title || !message){
             return NextResponse.json({message:"Title and message are required"}, {status:400});
         }
-        const notification = await prisma.Notification.create({
+        const notification = await prisma.notification.create({
             data:{
                 userId:user.id,
                 title,
                 message,
-                type:type|| "GENERAL",
             },
         });
         return NextResponse.json({data:notification}, {status:201});

@@ -5,7 +5,7 @@ import { getcurrentuser } from "@/app/lib/auth";
 
 export async function GET(req: NextRequest) {
     try{
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
         }
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
     try{
-        const user = await getcurrentuser(req);
+        const user = await getcurrentuser();
         if(!user){
             return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
         }
