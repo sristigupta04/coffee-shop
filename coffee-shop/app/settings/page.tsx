@@ -1,11 +1,11 @@
 
 "use client";
-
+import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signOut } from "next-auth/react";
 
-export default function Setting(){
+function SettingsContent() {
     const [page ,setpage] = useState("profile");
    
   const param = useSearchParams();
@@ -307,3 +307,10 @@ className="flex items-center justify-between border-b border-[#eee4da] px-5 py-5
 }
 
 
+export default function Settings() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
