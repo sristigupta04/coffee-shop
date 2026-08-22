@@ -222,8 +222,7 @@ router.push(`/orders/${verifyData.data.id}`);
   }
   console.log(data);
   alert("Order placed successfully");
-  router.push(`/order/${data.data.id}`);
-
+router.push(`/orders/${data.data.id}`);
   }catch(err){
     console.error(err);
     alert(err instanceof Error ? err.message : "An error occurred");

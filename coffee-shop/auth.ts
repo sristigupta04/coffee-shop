@@ -1,4 +1,3 @@
-
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
@@ -12,64 +11,92 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: {},
         password: {},
       },
+
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email as string,
-          },
-        });
-        if(!user) {
-          return null;
-        }
-        const match = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
-        if (!match) {
+          console.log("LOGIN ERROR: missing email/password");
           return null;
         }
 
+        const email = String(credentials.email)
+          .trim()
+          .toLowerCase();
+
+        const password = String(credentials.password);
+
+        console.log("LOGIN EMAIL:", email);
+
+        const user = await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
+
+        if (!user) {
+          console.log("LOGIN ERROR: USER NOT FOUND");
+          return null;
+        }
+
+        console.log("LOGIN USER FOUND:", user.id);
+
+        const match = await bcrypt.compare(
+          password,
+          user.password
+        );
+
+        console.log("LOGIN PASSWORD MATCH:", match);
+
+        if (!match) {
+          console.log("LOGIN ERROR: PASSWORD DOES NOT MATCH");
+          return null;
+        }
+
+        console.log("LOGIN SUCCESS:", user.id);
+
         return {
-          id: user.id.toString(),
+          id: user.id,
           name: user.name,
           email: user.email,
         };
-      } 
+      },
     }),
-     Google({
+
+    Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
 
   callbacks: {
-    async jwt({token}){
-      if(token.email){
-        const user = await prisma.user.findUnique({
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.userId = user.id;
+      }
+
+      if (!token.userId && token.email) {
+        const dbUser = await prisma.user.findUnique({
           where: {
             email: token.email,
           },
           select: {
             id: true,
-            name: true,
-            email: true,
           },
-        
         });
-        if(user){
-          token.userId = user.id.toString();
+
+        if (dbUser) {
+          token.userId = dbUser.id;
         }
       }
-            return token;
-      },
-      async session({session, token}){
-        if(session.user && token.userId){
-          session.user.id = token.userId as string;
-        }
-        return session;
-      },
+
+      return token;
     },
+
+    async session({ session, token }) {
+      if (session.user && token.userId) {
+        session.user.id = token.userId as string;
+      }
+
+      return session;
+    },
+  },
 });

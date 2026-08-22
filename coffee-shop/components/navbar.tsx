@@ -30,9 +30,8 @@ if(status !== "authenticated" || !session?.user?.id){
 try{
   const userId = session.user.id;
   const res = await fetch(`/api/cart/${userId}`,{
-    headers:{
-      userId,
-    }
+     credentials: "include",
+  cache: "no-store",
   });
 
   const data = await res.json();
@@ -71,7 +70,7 @@ return () => {
   );
 }
 },
-  [status, session]);
+  [status, session?.user?.id]);
 
  if (pathname === "/login") {
   return null;

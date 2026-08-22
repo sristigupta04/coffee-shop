@@ -56,17 +56,16 @@ async function main() {
   ];
 
   const images = [
-    "/Cappuccino.jpg",
-    "/coffee1.jpg",
-    "/coffee2.jpg",
-    "/coffee3.jpg",
-    "/coffee4.jpg",
-    "/coffee6.jpg",
-    "/hot.png",
-    "/cold.png",
-    "/desserts.png",
-  ];
-
+  "/Cappuccino.jpg",
+  "/coffee1.jpg",
+  "/coffee2.jpg",
+  "/coffee3.jpg",
+  "/coffee4.jpg",
+  "/coffee6.jpg",
+  "/hot.png",
+  "/cold.png",
+  "/desserts.png",
+];
   const products = Array.from({ length: 200 }, (_, index) => {
     const name = coffeeNames[index % coffeeNames.length];
 
