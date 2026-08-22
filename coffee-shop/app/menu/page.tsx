@@ -1,5 +1,5 @@
 "use client";
-
+import { Suspense } from "react";
 import { useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -17,7 +17,7 @@ type Product = {
   quantity?: number;
 };
 
-export default function Menu(){
+ function MenuContent(){
   const [prod,setprod]  = useState<Product[]>([]);
   const [load,setload] = useState(true);
   const [category, setCategory] = useState("All");
@@ -236,4 +236,10 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
 }
 
 
- 
+ export default function Menu() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <MenuContent />
+    </Suspense>
+  );
+}
