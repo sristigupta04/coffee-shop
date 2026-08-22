@@ -1,5 +1,5 @@
 
-import {product} from "@/types/product";
+import { Product } from "@/types/product";
 import {NextRequest, NextResponse} from "next/server";
 export async function  prod(req:NextRequest){
   const res= await fetch("http://localhost:3000/api/products");
@@ -13,7 +13,7 @@ export async function  prod(req:NextRequest){
       return result.data;
   }
 
-export async function byId(id:Number):Promise<product | null> {
+export async function byId(id:Number):Promise<Product | null> {
 const res= await fetch("http://localhost:3000/api/products");
 const result = await res.json();
 if(!result.success){
