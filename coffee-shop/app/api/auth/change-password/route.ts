@@ -1,7 +1,7 @@
 import {  prisma } from "@/app/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getcurrentuser } from "@/app/lib/auth";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { createactive} from "@/app/lib/activity";
 
 
