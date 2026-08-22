@@ -15,7 +15,7 @@ export async function GET(req:NextRequest, {params}:params){
         const body = await req.json();
         const {isRead} = body;
 
-        if(typeof isRead === "boolean"){
+        if(typeof isRead !== "boolean"){
             return NextResponse.json({message:"Invalid request body"}, {status:400});
         }
 

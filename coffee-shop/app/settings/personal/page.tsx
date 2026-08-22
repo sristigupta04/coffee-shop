@@ -36,7 +36,7 @@ export default function Personal(){
 const handle = async () =>{
     try{
         const res = await fetch("/api/settings/personal", {
-            method:"PATCH",
+            method:"PUT",
             headers:{
                 "Content-Type":"application/json",
             },

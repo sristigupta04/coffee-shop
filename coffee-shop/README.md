@@ -1,36 +1,346 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+                         ☕ COFFEE SHOP
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │     Next.js 16    │
+                    │    App Router     │
+                    └─────────┬─────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+              ▼               ▼               ▼
+       ┌────────────┐  ┌────────────┐  ┌────────────┐
+       │   Public   │  │    User    │  │   Admin    │
+       │   Pages    │  │   Pages    │  │   Pages    │
+       └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+             │               │               │
+             ▼               ▼               ▼
+       ┌────────────┐  ┌────────────┐  ┌────────────┐
+       │ Home       │  │ Profile    │  │ Dashboard  │
+       │ Menu       │  │ Cart       │  │ Products   │
+       │ Product    │  │ Checkout   │  │ Orders     │
+       │ About      │  │ Orders     │  │ Coupons    │
+       └────────────┘  │ Settings   │  │ Users      │
+                       │ Notifica.  │  └────────────┘
+                       └─────┬──────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │ Reusable Components │
+                  ├─────────────────────┤
+                  │ Navbar              │
+                  │ Footer              │
+                  │ Product Card        │
+                  │ Cart Components     │
+                  │ Checkout Components │
+                  │ Forms               │
+                  │ UI Components       │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                  ┌─────────────────────┐
+                  │    API ROUTES       │
+                  ├─────────────────────┤
+                  │ /api/auth           │
+                  │ /api/products       │
+                  │ /api/cart           │
+                  │ /api/orders         │
+                  │ /api/coupon         │
+                  │ /api/payment        │
+                  │ /api/profile        │
+                  │ /api/settings       │
+                  │ /api/notifications  │
+                  └──────────┬──────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+       ┌────────────┐ ┌────────────┐ ┌────────────┐
+       │ NextAuth   │ │  Prisma    │ │ Razorpay   │
+       │ Auth       │ │    ORM     │ │  Payment   │
+       └─────┬──────┘ └─────┬──────┘ └────────────┘
+             │              │
+             │              ▼
+             │      ┌─────────────────┐
+             │      │   PostgreSQL    │
+             │      │    Database     │
+             │      ├─────────────────┤
+             │      │ User            │
+             │      │ Product         │
+             │      │ Cart            │
+             │      │ CartItem        │
+             │      │ Order           │
+             │      │ OrderItem       │
+             │      │ Coupon          │
+             │      │ Notification    │
+             │      │ AccountActivity │
+             │      └─────────────────┘
+             │
+             ▼
+       ┌──────────────┐
+       │ Authentication│
+       │ Login         │
+       │ Register      │
+       │ Session       │
+       │ Role          │
+       └──────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 🔄 Main User Flow
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+Register / Login
+       │
+       ▼
+     Home
+       │
+       ▼
+     Menu
+       │
+       ▼
+   Product Details
+       │
+       ▼
+      Cart
+       │
+       ▼
+    Checkout
+       │
+       ├───────────────┐
+       │               │
+       ▼               ▼
+      COD           ONLINE
+       │               │
+       │          Razorpay
+       │               │
+       │          Verification
+       │               │
+       └───────┬───────┘
+               ▼
+          Create Order
+               │
+               ▼
+        Order Details
+               │
+               ▼
+         Notifications
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🛒 Cart Flow
 
-## Learn More
+```text
+Product
+   │
+   ▼
+Add to Cart
+   │
+   ▼
+Cart
+   │
+   ├── Increase Quantity
+   ├── Decrease Quantity
+   ├── Remove Item
+   └── Clear Cart
+   │
+   ▼
+Checkout
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 💳 Payment Flow
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+Checkout
+   │
+   ▼
+Select ONLINE
+   │
+   ▼
+POST /api/payment/create-order
+   │
+   ▼
+Razorpay Order
+   │
+   ▼
+Razorpay Checkout UI
+   │
+   ▼
+Payment
+   │
+   ▼
+POST /api/payment/verify
+   │
+   ▼
+Create Order
+   │
+   ▼
+/order/[id]
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 🎟️ Coupon Flow
 
-## Deploy on Vercel
+```text
+Checkout
+   │
+   ▼
+Enter Coupon
+   │
+   ▼
+POST /api/coupon/validate
+   │
+   ▼
+Check Database
+   │
+   ├── Invalid
+   ├── Expired
+   ├── Minimum Amount
+   └── Valid
+         │
+         ▼
+     Calculate Discount
+         │
+         ▼
+      Final Total
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 👤 User Settings Flow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+Settings
+   │
+   ├── Personal Settings
+   │      └── Notifications / Order Updates / Promo / Email
+   │
+   ├── Account
+   │      ├── Edit Profile
+   │      ├── Phone
+   │      ├── Email
+   │      ├── Logout
+   │      └── Delete Account
+   │
+   ├── Privacy
+   │
+   ├── Terms & Conditions
+   │
+   └── Notifications
+```
+
+### 🔔 Notification Flow
+
+```text
+Order / Account Activity
+          │
+          ▼
+Create Notification
+          │
+          ▼
+Notification Table
+          │
+          ▼
+GET /api/notifications
+          │
+          ▼
+Notifications Page
+          │
+          ├── Mark Read
+          └── Delete
+```
+
+### 👨‍💼 Admin Flow
+
+```text
+Admin Login
+     │
+     ▼
+Admin Dashboard
+     │
+     ├── Products
+     │     ├── Create
+     │     ├── Read
+     │     ├── Update
+     │     └── Delete
+     │
+     ├── Orders
+     │     └── Update Status
+     │
+     ├── Coupons
+     │     ├── Create
+     │     └── Manage
+     │
+     └── Users
+```
+
+### 📁 Recommended Project Architecture
+
+```text
+coffee-shop/
+│
+├── app/
+│   ├── (auth)/
+│   │   ├── login/
+│   │   └── register/
+│   │
+│   ├── admin/
+│   │   ├── dashboard/
+│   │   ├── products/
+│   │   ├── orders/
+│   │   ├── coupons/
+│   │   └── users/
+│   │
+│   ├── api/
+│   │   ├── auth/
+│   │   ├── products/
+│   │   ├── cart/
+│   │   ├── orders/
+│   │   ├── coupon/
+│   │   ├── payment/
+│   │   ├── profile/
+│   │   ├── settings/
+│   │   └── notifications/
+│   │
+│   ├── cart/
+│   ├── checkout/
+│   ├── menu/
+│   ├── order/
+│   │   └── [id]/
+│   ├── profile/
+│   ├── settings/
+│   │   ├── account/
+│   │   ├── personal/
+│   │   ├── privacy/
+│   │   └── terms/
+│   ├── notifications/
+│   ├── layout.tsx
+│   └── page.tsx
+│
+├── components/
+│   ├── ui/
+│   ├── cards/
+│   ├── forms/
+│   ├── layout/
+│   ├── cart/
+│   ├── checkout/
+│   ├── order/
+│   └── admin/
+│
+├── app/lib/
+│   ├── prisma.ts
+│   ├── auth.ts
+│   └── activity.ts
+│
+├── prisma/
+│   └── schema.prisma
+│
+├── public/
+│   └── images/
+│
+├── types/
+├── utils/
+├── hooks/
+│
+├── auth.ts
+├── prisma.config.ts
+├── package.json
+├── tsconfig.json
+└── README.md
+```

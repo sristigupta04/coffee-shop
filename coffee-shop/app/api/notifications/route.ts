@@ -41,9 +41,16 @@ export async function POST(req: NextRequest) {
         }
         const body = await req.json();
         const {title, message} = body;
-        if(!title || !message){
-            return NextResponse.json({message:"Title and message are required"}, {status:400});
-        }
+        
+    if (!title?.trim() || !message?.trim()) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Title and message are required",
+        },
+        { status: 400 }
+      );
+    }
         const notification = await prisma.notification.create({
             data:{
                 userId:user.id,
