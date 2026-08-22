@@ -47,8 +47,7 @@ const {status,data:session} = useSession();
 const newquant = quant + 1;
 setquant(newquant);
 
-    window.dispatchEvent(new CustomEvent("cartUpdate"));
-  
+window.dispatchEvent(new CustomEvent("cartUpdated"));  
     } catch(error){
         console.error("Error adding item to cart:", error);
     }

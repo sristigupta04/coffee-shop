@@ -1,4 +1,3 @@
-import Product from "@/components/Menu/ProductCard";
 
 type Product  ={
   id: number;

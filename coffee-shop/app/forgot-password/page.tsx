@@ -21,10 +21,29 @@ export default function ForgotPassword() {
     setMessage("");
 
     try {
-      // API next step mein connect karenge
-      setMessage("Password reset request submitted.");
-    } catch {
-      setMessage("Something went wrong. Please try again.");
+      const res = await fetch("/api/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Failed to send reset email"
+        );
+      }
+
+      setMessage(data.message);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -33,7 +52,6 @@ export default function ForgotPassword() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#120805]">
 
-      {/* Background */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{
@@ -43,12 +61,10 @@ export default function ForgotPassword() {
 
       <div className="absolute inset-0 bg-black/50" />
 
-      {/* Card */}
       <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-10">
 
         <div className="w-full max-w-md rounded-[30px] border border-[#704326] bg-[#21120c]/95 p-8 shadow-2xl sm:p-10">
 
-          {/* Back */}
           <Link
             href="/login"
             className="mb-8 inline-flex items-center gap-2 text-sm text-[#bda493] transition hover:text-[#d27a25]"
@@ -57,14 +73,12 @@ export default function ForgotPassword() {
             Back to Login
           </Link>
 
-          {/* Logo */}
           <img
             src="/logo.jpg"
             alt="Coffee Shop"
             className="mx-auto mb-7 h-16 w-auto rounded-xl object-contain"
           />
 
-          {/* Heading */}
           <div className="mb-8 text-center">
             <h1 className="font-(family-name:--font-playfair) text-4xl font-bold text-[#f5e1ca]">
               Forgot Password?
@@ -75,7 +89,6 @@ export default function ForgotPassword() {
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
 
             <div>
@@ -107,19 +120,18 @@ export default function ForgotPassword() {
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#b75d08] py-4 font-semibold text-white transition hover:bg-[#cf7319] disabled:bg-gray-600"
             >
               {loading ? "Sending..." : "Send Reset Link"}
+
               {!loading && <ArrowRight size={19} />}
             </button>
 
           </form>
 
-          {/* Message */}
           {message && (
             <p className="mt-5 rounded-xl bg-[#2a1811] px-4 py-3 text-center text-sm text-[#d9b99e]">
               {message}
             </p>
           )}
 
-          {/* Login */}
           <p className="mt-7 text-center text-sm text-[#a88d7a]">
             Remember your password?{" "}
             <Link

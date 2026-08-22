@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" 
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,144 +20,138 @@ enum OrderStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-phone     String?
-  image     String? 
+  id       String  @id @default(cuid())
+  name     String
+  email    String  @unique
+  password String
+  role     Role    @default(USER)
+  phone    String?
+  image    String?
 
+  notificationEnabled Boolean        @default(true)
+  orderUpdates        Boolean        @default(true)
+  promoEmails         Boolean        @default(true)
+  emailNotifications  Boolean        @default(true)
+  notifications       Notification[]
+  orders              Order[]
 
-notificationEnabled Boolean @default(true)
-orderUpdates       Boolean @default(true)
-promoEmails        Boolean @default(true)
-emailNotifications Boolean @default(true)
-notifications Notification[]
-  orders    Order[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-paymentMethods PaymentMethod[]
-accountActivities AccountActivity[]
-  carts Cart[]
-  
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  paymentMethods      PaymentMethod[]
+  accountActivities   AccountActivity[]
+  carts               Cart[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Product {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String
   price       Float
   image       String
   category    String
-  stock       Int      @default(0)
-  isAvailable Boolean  @default(true)
+  stock       Int     @default(0)
+  isAvailable Boolean @default(true)
 
-  orderItems  OrderItem[]
+  orderItems OrderItem[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   cartItems CartItem[]
 }
 
 model Order {
-  id         String      @id @default(cuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id])
-  totalPrice Float
-  status     OrderStatus @default(PENDING)
- address    String
-  phone      String
-  paymentWay String
-  items       OrderItem[]
- paymentStatus     String      @default("PENDING")
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  totalPrice        Float
+  status            OrderStatus @default(PENDING)
+  address           String
+  phone             String
+  paymentWay        String
+  items             OrderItem[]
+  paymentStatus     String      @default("PENDING")
   razorpayOrderId   String?
   razorpayPaymentId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  quantity  Int
-  price     Float
-
+  quantity Int
+  price    Float
 }
 
-
 model Cart {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
-  items  CartItem[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model CartItem {
-  id        String  @id @default(cuid())
-  cartId    String
-    quantity  Int
+  id       String @id @default(cuid())
+  cartId   String
+  quantity Int
 
-  price    Float
+  price Float
 
-  cart      Cart    @relation(fields: [cartId], references: [id])
+  cart Cart @relation(fields: [cartId], references: [id])
 
   productId String
-product   Product @relation(fields: [productId], references: [id])
+  product   Product @relation(fields: [productId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  @@unique ([cartId, productId])
 
+  @@unique([cartId, productId])
 }
 
 model Coupon {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  description String
-  discount    Float
+  id            String   @id @default(cuid())
+  code          String   @unique
+  description   String
+  discount      Float
   minimumAmount Float
-  isActive    Boolean  @default(true)
-  expireDate  DateTime
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-
-model PaymentMethod {
-  id        String   @id @default(cuid())
-  name      String
-  details   String
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  type      String
-  
-  isActive  Boolean  @default(true)
-  cardNumber String
-  
+  isActive      Boolean  @default(true)
+  expireDate    DateTime
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-model AccountActivity{
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  action   String
-  details   String
 
-  
+model PaymentMethod {
+  id      String @id @default(cuid())
+  name    String
+  details String
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  type    String
+
+  isActive   Boolean @default(true)
+  cardNumber String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AccountActivity {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  action  String
+  details String
+
   createdAt DateTime @default(now())
 }
 
@@ -168,5 +162,14 @@ model Notification {
   title     String
   message   String
   isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
   createdAt DateTime @default(now())
 }
