@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-
+import { signOut } from "next-auth/react";
 
 export default function Setting(){
     const [page ,setpage] = useState("profile");
@@ -294,12 +294,12 @@ className="flex items-center justify-between border-b border-[#eee4da] px-5 py-5
           </a>
 
           <button
-            type="button"
-            className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-left text-sm font-semibold text-red-600 transition hover:bg-red-100"
-          >
-            Logout
-          </button>
-
+  type="button"
+  onClick={() => signOut({ callbackUrl: "/login" })}
+  className="mt-2 w-full rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-left text-sm font-semibold text-red-600 transition hover:bg-red-100"
+>
+  Logout
+</button>
         </section>
       </div>
     </main>

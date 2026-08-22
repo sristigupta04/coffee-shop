@@ -228,12 +228,24 @@ try{
       { status: 400 }
     );
   }
-  const val = await prisma.cart.findUnique({
+  const body = await req.json();
+  const {cartItemId} = body;
+  if(!cartItemId){
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Cart item ID is required",
+      },
+      { status: 400 }
+    );
+  }
+
+  const cart = await prisma.cart.findUnique({
     where:{
-      id:userId,
+      userId,
     }
   });
-  if(!val){
+  if(!cart){
     return NextResponse.json(
       {
         success:false,
@@ -242,22 +254,42 @@ try{
       {status:404}
     )
   }
-  const deleteCart = await prisma.cart.delete({
+  const cartItem = await prisma.cartItem.findFirst({
     where:{
-      id:userId,
+      id:cartItemId,
+      cartId:cart.id,
     }
+    
+  });
+  if(!cartItem){
+    return NextResponse.json(
+      {
+        success:false,
+        message:"cart item not found",
+      },
+      {status:404}
+    )
+  }
+
+await prisma.cartItem.delete({
+  where: {
+    id: cartItem.id,
+  },
 });
 
-   return NextResponse.json(
-    {
-      success:true,
-      data:deleteCart,
-    },
-    {status:200}
-   )
+return NextResponse.json(
+  {
+    success: true,
+    message: "Cart item removed successfully",
+  },
+  { status: 200 }
+);
+
 }
+  
 
 catch(error){
+  console.error("DELETE CART ITEM ERROR:", error);
   return NextResponse.json(
     {
       success:false,

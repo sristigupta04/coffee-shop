@@ -117,18 +117,28 @@ setRecommend(recommended);
 
   const grandTotal = subtotal + tax;
 
-  
-  const cartChanged = () => {
-    window.dispatchEvent(
-      new Event("cartUpdated")
-    );
-  };
+  const cartChanged = (updatedCart: Cart[]) => {
+  const count = updatedCart.reduce(
+    (acc, item) => acc + item.quantity,
+    0
+  );
+
+  window.dispatchEvent(
+    new CustomEvent("cartUpdated", {
+      detail: { count },
+    })
+  );
+};
 
 
 const remove = async (id:string)=>{
   try{
     if(status !== "authenticated" || !session?.user?.id){
       alert("Please log in to remove items from your cart.");
+      return;
+    }
+    const item = cart.find((item) => item.id === id);
+    if(!item){
       return;
     }
     const userId = session.user.id;
@@ -138,14 +148,17 @@ const remove = async (id:string)=>{
       headers:{
         "Content-Type":"application/json",
       },
-      body:JSON.stringify({cartItemId:id}),
+      body:JSON.stringify({cartItemId:item.id}),
     });
     const data = await res.json();
     if(!res.ok){
       throw new Error(data.message || "Failed to remove item from cart");
     }
-    setcart((prev) =>prev.filter((items) => items.id !== id));
-    cartChanged();
+    setcart((prev) => {
+  const updatedCart = prev.filter((item) => item.id !== id);
+  cartChanged(updatedCart);
+  return updatedCart;
+});
   }catch(error){
     console.error("Error removing item from cart:", error);
   }
@@ -153,37 +166,38 @@ const remove = async (id:string)=>{
    
   const add = async (id: string) => {
     
-    const item = cart.find((item) =>
-      item.id === id
-        ? {
-            ...item,
-            quantity: item.quantity + 1,
-          }
-        : item
-    );
+   const item = cart.find((item) => item.id === id);
+       
 if(!item || status !== "authenticated" || !session?.user?.id){
   return;
 }
+const userId = session.user.id;
+console.log("REMOVE PRODUCT ID:", item.productId);
+console.log("REMOVE USER ID:", userId);
+
 try{
-  const res = await fetch(`/api/cart/${session.user.id}`, {
+  const res = await fetch(`/api/cart/${userId}`, {
     method:"PUT",
     headers:{
       "Content-Type":"application/json",
     },
+    
     body:JSON.stringify({productId: item.productId, quantity:item.quantity + 1}),
   });
   const data = await res.json();
   if(!res.ok){
     throw new Error(data.message || "Failed to update item quantity");
   }
-  setcart((prev) =>
-    prev.map((item) =>
-      item.id === id
-        ? { ...item, quantity: item.quantity + 1 }
-        : item
-    )
+  setcart((prev) => {
+  const updatedCart = prev.map((item) =>
+    item.id === id
+      ? { ...item, quantity: item.quantity + 1 }
+      : item
   );
-  cartChanged();
+
+  cartChanged(updatedCart);
+  return updatedCart;
+});
 } catch (error) {
   console.error("Error updating item quantity:", error);
 }
@@ -196,7 +210,10 @@ try{
    if (!item || status !== "authenticated" || !session?.user?.id) {
   return;
 }
-
+if (item.quantity <= 1) {
+  await remove(id);
+  return;
+}
 const userId = session.user.id;
 
     try {
@@ -216,15 +233,18 @@ const userId = session.user.id;
         throw new Error( data.message || "Failed to update quantity" );
       }
 
-      setcart((prev) =>  prev.map((item) => item.id === id  ? {
-                ...item,quantity:
-                  item.quantity - 1,
-              }
-            : item
-        )
-      );
+     
 
-      cartChanged();
+    setcart((prev) => {
+      const updatedCart = prev.map((item) =>
+        item.id === id
+          ? { ...item, quantity: item.quantity - 1 }
+          : item
+      );
+      cartChanged(updatedCart);
+      return updatedCart;
+});
+
     } catch (error) {
       console.error("DECREASE CART ERROR:",error);
     }
@@ -239,15 +259,24 @@ const userId = session.user.id;
       const userId = session.user.id;
 
       const items = [...cart];
-      await Promise.all(items.map((item) => fetch(`/api/cart/${userId}`, {
-        method:"DELETE",
-        headers:{
-          "Content-Type":"application/json",
-        },
-        body:JSON.stringify({cartItemId:item.id}),
-      })));
-      setcart([]);
-      cartChanged();
+
+      await Promise.all(items.map(async (item) => {
+        const res = await fetch(`/api/cart/${userId}`, {
+          method:"DELETE",
+          headers:{
+            "Content-Type":"application/json",
+          },
+          body:JSON.stringify({productId: item.productId}),
+        });
+        const data = await res.json();
+        if(!res.ok){
+          throw new Error(data.message || "Failed to clear cart");
+        }
+      }));
+
+    setcart([]);
+cartChanged([]);
+
     }catch(error){
       console.error("Error clearing cart:", error);
     }
@@ -288,7 +317,6 @@ if (cartRes.ok) {
   }));
 
   setcart(formattedCart);
-}
 
 
 
@@ -303,8 +331,9 @@ const newRecommend = allProducts
       )
   )
   .slice(0, 3); 
-       setRecommend(newRecommend);
-      cartChanged();
+      setRecommend(newRecommend);
+cartChanged(formattedCart);
+}
     }catch(error){
       console.error("Error adding recommended item to cart:", error)
     }

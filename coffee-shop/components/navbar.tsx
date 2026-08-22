@@ -3,18 +3,14 @@
 import Link from "next/link";
 import  Search from "@/components/searchBar";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-
 import {
   Home,
   Coffee,
-  Contact,
-  ClipboardList,
+ LogIn,
+ Settings,
   ShoppingCart,
-
-
-  LogIn,
-  Settings,
 } from "lucide-react";
 
 export default function Navbar() {
@@ -22,43 +18,73 @@ const pathname = usePathname();
 
 const [cartcount,setcartcount] = useState(0);
 
-
+const {status, data: session} = useSession();
 useEffect(()=>{
-  const update = () => {
+  const update = async() => {
 
-  const saved = JSON.parse(localStorage.getItem("cart") || "[]"
+if(status !== "authenticated" || !session?.user?.id){
+  setcartcount(0);
+  return;
+}
+
+try{
+  const userId = session.user.id;
+  const res = await fetch(`/api/cart/${userId}`,{
+    headers:{
+      userId,
+    }
+  });
+
+  const data = await res.json();
+  
+  if(!res.ok){
+    throw new Error(data.message || "Failed to fetch cart items");
+  }
+const items = data.data?.items || [];
+  const count = items.reduce((acc:number, item:any) => acc + (item.quantity || 0), 0);
+  setcartcount(count);
+  
+} catch(error){
+  console.error("Error fetching cart items:", error);
+  setcartcount(0);
+}
+  };
+
+update();
+const handlecartUpdate = (event: CustomEvent) => {
+  const custoMEvent = event as CustomEvent;
+  if(typeof custoMEvent.detail === "number"){
+    setcartcount(custoMEvent.detail);
+  }else{
+    update();
+  }
+}
+window.addEventListener(
+  "cartUpdated",
+  handlecartUpdate as EventListener
 );
 
-  const count =  Array.isArray(saved) ?
-   saved.reduce((acc:any, item:any) => acc + (item.quantity || 0), 0) : 0;
-  setcartcount(count);
-
-  }
-  
-  update();
-
-
-window.addEventListener("cartUpdated", update);
-
 return () => {
-  window.removeEventListener("cartUpdated", update);
-};
-},[]);
+  window.removeEventListener(
+    "cartUpdated",
+    handlecartUpdate as EventListener
+  );
+}
+},
+  [status, session]);
 
  if (pathname === "/login") {
   return null;
 }
 
-<Search />
-
-  return (
+ return (
     <nav className="sticky top-0 z-50 w-full border-b border-[#eadbc9] bg-[#fffaf3] shadow-sm">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-10">
 
         {/* Logo */}
         <Link href="/" className="flex items-center">
           <img
-            src="/logo.png"
+            src="/logo.jpg"
             alt="Coffee Shop"
             className="h-12 w-auto object-contain"
           />
@@ -78,16 +104,16 @@ return () => {
             icon={<Coffee size={18} />}
             text="Menu"
           />
-<Search/>
 
-       
+          {/* Search */}
+          <Search />
 
-
-<NavItem
-  href="/settings"
-  icon={<Settings size={18} />}
-  text="Settings"
-/>
+          {/* Settings */}
+          <NavItem
+            href="/settings"
+            icon={<Settings size={18} />}
+            text="Settings"
+          />
 
           {/* Cart */}
           <Link
@@ -102,21 +128,17 @@ return () => {
           </Link>
 
           {/* Login */}
-<Link
-  href="/login"
-  className="ml-2 flex items-center gap-2 rounded-xl bg-[#8b4a24] px-5 py-2.5 font-medium text-white transition hover:bg-[#6f381b]"
->
-  <LogIn size={18} />
-  Login
-</Link>
-         
+          <Link
+            href="/login"
+            className="ml-2 flex items-center gap-2 rounded-xl bg-[#8b4a24] px-5 py-2.5 font-medium text-white transition hover:bg-[#6f381b]"
+          >
+            <LogIn size={18} />
+            Login
+          </Link>
+
         </div>
       </div>
-
-      
-       </nav> 
-      
-  
+    </nav>
   );
 }
 

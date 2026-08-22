@@ -1,8 +1,9 @@
 "use client"
 
 import {useState} from "react";
-
+import {useSession} from "next-auth/react";
 type product = {
+    id:string;
     image:string;
     name:string;
     description:string;
@@ -20,12 +21,43 @@ export default function Product({
     const [quant,setquant] = useState(0);
  const {image,name, description,price} = product;
 
- const increase = ()=>{
-    setquant((prev)=>Math.min(100,prev+1))
- }
-const decrease = ()=>{
-    setquant((prev)=>Math.max(10,prev+1))
-};
+const {status,data:session} = useSession();
+ const increase = async ()=>{
+    if(status !== "authenticated" || !session?.user?.id){
+        alert("Please login to add items to cart");
+        return;
+    }
+
+    try{
+        const res = await fetch(`/api/cart/${session.user.id}`,{
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                productId: product.id,
+                quantity: quant + 1,
+            })
+        });
+
+        const data = await res.json();
+        if(!res.ok){
+            throw new Error("Failed to add item to cart");
+        }
+const newquant = quant + 1;
+setquant(newquant);
+
+    window.dispatchEvent(new CustomEvent("cartUpdate"));
+  
+    } catch(error){
+        console.error("Error adding item to cart:", error);
+    }
+}
+   const decrease = () => {
+  setquant((prev) => Math.max(1, prev - 1));
+   }
+
+
 return(
    <div className="overflow-hidden rounded-2xl border
    border-[#eadbc9] bg-[#ffaf3] shadow-sm transition
@@ -56,19 +88,34 @@ return(
 {/* quanttity  includee inbox style everything */}
 
 
+<div className="mt-4 flex items-center justify-between">
 
-<div className="mt-4 flex item-center justify-between">
+  <div className="flex items-center gap-3 rounded-full border border-[#dec9b8] bg-white px-2 py-1">
 
-    <div className="flex item-center gap-3 rounded-full border border-[#dec9b8] bg-white px-2 py-1">
-       <button onClick={increase}
-       disabled={quant === 0}
-       className="flex h-8 w-8 items-center justify-center rounded-full
-       bg-[#8b451f] text-white diabled:opacity-40">
-        - </button> 
-        <span className="w-5 text-center font-medium text-[#3b2114]">{quant}</span>
-        <button  className="flex h-8 w-8 items-center justify-center rounded-full
-       bg-[#8b451f] text-white diabled:opacity-40"> +</button>
-    </div>
+    <button
+      type="button"
+      onClick={decrease}
+      disabled={quant <= 1}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8b451f] text-white disabled:opacity-40"
+    >
+      -
+    </button>
+
+    <span className="w-5 text-center font-medium text-[#3b2114]">
+      {quant}
+    </span>
+
+    <button
+      type="button"
+      onClick={increase}
+      disabled={quant >= 100}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8b451f] text-white disabled:opacity-40"
+    >
+      +
+    </button>
+
+  </div>
+
 </div>
 </div>
    </div> 
