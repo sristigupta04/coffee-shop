@@ -5,10 +5,12 @@ import { auth } from "@/auth";
 type params ={
   params: Promise<{id:string}>
 }
-export async function GET(req:NextRequest, {params}:params){
-const {id} = await params;
-try{
-  const session = await auth();
+export async function GET(
+  req: NextRequest,
+  { params }: params
+) {
+  try {
+    const session = await auth();
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -19,52 +21,46 @@ try{
         { status: 401 }
       );
     }
-  const {id: userId} = await params;
-  
-  if(!userId){
-    return NextResponse.json({
-      success:false,
-      message:"unauthorized",
-    },
-    {status:401});
-  }
-    const cart = await prisma.cart.upsert({
-        where:{
-            userId:id,
-        },
-        update:{},
-        create:{
-            userId:id,
-        },
-        include:{
-            items:{
-                include:{
-                    product:true,
-                }
-            }
-        }
-    });
-   
-    return NextResponse.json({
-        success:true,
-        msg:"cart founded",
-        data: cart
-    },
-      {status:200});
 
-}
-catch(error) {
+    const userId = session.user.id;
+
+    const cart = await prisma.cart.upsert({
+      where: {
+        userId,
+      },
+      update: {},
+      create: {
+        userId,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Cart found",
+        data: cart,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("GET CART ERROR:", error);
+
     return NextResponse.json(
       {
         success: false,
-        message:"internal server error",
+        message: "Internal server error",
       },
       { status: 500 }
     );
   }
-        }
-
-
+}
 
 
 
