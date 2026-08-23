@@ -1,9 +1,6 @@
 [build]
   base = "coffee-shop"
   command = "npm run build"
-  publish = "dist"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
