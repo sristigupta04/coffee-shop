@@ -3,21 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  User,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ArrowRight,
-} from "lucide-react";
+import { Eye, EyeOff, Lock, Mail,Phone, User, ArrowRight } from "lucide-react";
 
+type Form = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}
 export default function Register() {
   const router = useRouter();
 
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
   });
 
@@ -27,7 +27,7 @@ export default function Register() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.name || !form.email || !form.password) {
+    if (!form.name || !form.email ||!form.phone || !form.password) {
       alert("Please fill all fields");
       return;
     }
@@ -57,23 +57,29 @@ export default function Register() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: `+91${form.phone.trim()}`,
+          password: form.password.trim(),
+        })
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        alert(data.message);
-        router.push("/login");
-      } else {
-        alert(data.message);
-      }
-    } catch (error) {
-      console.error(error);
-      alert("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+  if(!response.ok){
+    alert(data.message || "Something went wrong");
+    setLoading(false);
+    return;
+  }
+  alert("Registration successful! Please login.");
+  router.push("/login");
+}catch (error) {
+  console.error("Error during registration:", error);
+  alert("An error occurred during registration. Please try again.");
+}finally {
+  setLoading(false);
+}
   };
 
   return (
@@ -86,22 +92,19 @@ export default function Register() {
           backgroundImage: "url('/register-bg.jpg')",
         }}
       />
+<div className="absolute inset-0 bg-black/40" />
+<div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-10">
+  <div className="grid w-full max-w-6xl overflow-hidden rounded-[30px] border border-[#704326] bg-[#1c0d08] shadow-2xl lg:grid-cols-2">
 
-      {/* Dark overlay */}
-      <div className="absolute inset-0 bg-black/40" />
+    <div className="relative hidden min-h-[650px] overflow-hidden bg-cover bg-center lg:block">
 
-      {/* Main Card */}
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-10">
+      {/* left sidey */}
+      <style = {{
+        backgroundImage: "url('/register-bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}  >
 
-        <div className="grid w-full max-w-6xl overflow-hidden rounded-[30px] border border-[#704326] bg-[#1c0d08] shadow-2xl lg:grid-cols-2">
-
-          {/* LEFT IMAGE */}
-          <div
-            className="relative hidden min-h-[650px] overflow-hidden bg-cover bg-center lg:block"
-            style={{
-              backgroundImage: "url('/register-bg.jpg')",
-            }}
-          >
             {/* Image overlay */}
             <div className="absolute inset-0 bg-black/30" />
 
@@ -210,6 +213,35 @@ export default function Register() {
                   </div>
                 </div>
 
+<div>
+  <label className="mb-2 block text-sm font-medium text-[#f1dfcd]">
+                    Phone
+                  </label>  
+                  <div className="flex items-center rounded-xl border border-[#684631] bg-[#2a1811] px-4 focus-within:border-[#c06b1b]">
+                    <Phone
+                      size={19}
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="Enter your phone number"
+                      className="mr-3 text-[#c06b1b]"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Enter your phone number"
+                      value={form.phone}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          phone: e.target.value,
+                        })
+                      }
+                      className="w-full bg-transparent py-4 text-[#f5e1ca] outline-none placeholder:text-[#927769]"
+                    />
+                  </div>
+                </div>
+                    
+
+</div>
                 {/* Password */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#f1dfcd]">
@@ -283,6 +315,7 @@ export default function Register() {
 
         </div>
       </div>
+  
     </main>
   );
 }

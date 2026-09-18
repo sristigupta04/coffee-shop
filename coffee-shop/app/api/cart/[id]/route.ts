@@ -24,7 +24,7 @@ export async function GET(
 
     const userId = session.user.id;
 
-    const cart = await prisma.cart.upsert({
+    const cart= await prisma.cart.upsert({
       where: {
         userId,
       },
@@ -67,14 +67,19 @@ export async function GET(
         
 export async function PUT(req:NextRequest, {params}:params){
 try{
-    const {id:userId} = await params;
-    if(!userId){
-        return NextResponse.json({
-            success:false,
-            message:"product id is required",
+   const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthoraized",
         },
-        {status:400});
+        { status: 401 }
+      )
     }
+
+    const userId = session.user.id;
     const body = await req.json();
 
     const {productId, quantity} = body;

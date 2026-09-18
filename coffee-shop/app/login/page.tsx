@@ -6,24 +6,29 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import {
   Mail,
+  phone,
   Lock,
   Eye,
   EyeOff,
   ArrowRight,
 } from "lucide-react";
 
+type LoginMode = "email" | "phone";
 type Form = {
   email: string;
   password: string;
+  phone: string;
 };
 
 export default function Login() {
   const router = useRouter();
-
-  const [form, setForm] = useState<Form>({
-    email: "",
-    password: "",
-  });
+const [mode, setMode] = useState<LoginMode>("email");
+const [form, setForm] = useState<Form>({
+  email: "",
+  password: "",
+  phone: "",
+});
+ 
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -31,30 +36,47 @@ export default function Login() {
   // Email + Password Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!form.email || !form.password) {
-      alert("Please fill all fields");
-      return;
+if(mode === "email"){
+      if (!form.email || !form.password) {
+        alert("Please fill all fields");
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(form.email)) {
+        alert("Please enter a valid email address");
+        return;
+      }
+    }
+  if(mode === "phone"){
+      if (!form.phone || !form.password) {
+        alert("Please fill all fields");
+        return;
+      }
+      const phoneRegex = /^\d{10}$/; // Simple regex for 10-digit phone numbers
+      if (!phoneRegex.test(form.phone)) {
+        alert("Please enter a valid 10-digit phone number");
+        return;
+      }
     }
 
     setLoading(true);
 
-    try {
-      const result = await signIn("credentials", {
-        email: form.email,
-        password: form.password,
-        redirect: false,
-      });
+  try{
+    const result = await signIn("credentials", {
+      ...(mode === "email" ? { email: form.email } : { phone: `+91${form.phone}` }),
+      password: form.password,
+      redirect: false,
+    });
 
-      if (result?.ok) {
+      if(result?.ok){
         router.push("/");
         router.refresh();
-      } else {
-        alert("Invalid credentials");
+      }else{
+        alert("invalid credentials");
       }
-    } catch {
-      alert("Something went wrong");
-    } finally {
+    }catch{
+      alert("An error occurred during login. Please try again.");
+    }finally{
       setLoading(false);
     }
   };
@@ -65,11 +87,21 @@ export default function Login() {
       callbackUrl: "/",
     });
   };
+  const changeMode = (newMode: LoginMode) => {
+    setMode(newMode);
+    setForm({
+      email: "",
+      password: "",
+      phone: "",
+    });
+  }
+  setShowPassword(false);
+};
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#120805]">
 
-      {/* Coffee Background */}
+      {/* {/* Coffee  baclground? */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{
@@ -150,37 +182,96 @@ export default function Login() {
                 </p>
               </div>
 
+{/* email phone toggle */}
+<div classsName="mb-6 grid grid-cols-2 rounded-xl border border-[#684631] bg-[#2a1811] p-1">
+  <button type="button"
+  onClick={() => changeMode("email")}
+  className={`flex items-center justify-center gap-2 rounded-lg py-3  text-sm font-semibold transition ${
+    mode === "email" ?
+    "bg-[#b75d08] text-white shadow-md":
+    "text-{#bda493] hover:bg-[#352016]"
+  }`}>
+    <Mail size={19} className="text-[#c06b1b]"  />
+    Email
+  </button>
+
+  <button type="button"
+  onClick={() => changeMode("phone")}
+  className={`flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition ${
+    mode === "phone" ?
+    "bg-[#b75d08] text-white shadow-md":
+    "text-[#bda493] hover:bg-[#352016]"
+  }`}>
+    <Phone size={19} className="text-[#c06b1b]"  />
+    Phone
+  </button>
+</div>
+
               <form onSubmit={handleLogin} className="space-y-5">
 
                 {/* Email */}
+                {mode === "email" && (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-[#f1dfcd]">
+                      Email
+                    </label>
+                    <div className="flex items-center rounded-xl border border-[#684631] bg-[#2a1811] px-4 focus-within:border-[#c06b1b]">
+
+                      <Mail
+                        size={19}
+                        className="mr-3 text-[#c06b1b]"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Enter your email"
+                        value={form.email}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            email: e.target.value,
+                          })
+                        }
+                        className="w-full bg-transparent py-4 text-[#f5e1ca] outline-none placeholder:text-[#927769]"
+                      />
+
+                    </div>
+                  </div>
+                )}
+                {/* phone  */}
+              
+
+
+              {mode === "phone" && (
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#f1dfcd]">
-                    Email
+                    Phone
                   </label>
-
                   <div className="flex items-center rounded-xl border border-[#684631] bg-[#2a1811] px-4 focus-within:border-[#c06b1b]">
-
-                    <Mail
+                    <Phone
                       size={19}
                       className="mr-3 text-[#c06b1b]"
                     />
+                    <span className="mr-2 border-r border-[#684631] pr-2 text-[#f5e1ca]">+91</span>
 
                     <input
-                      type="email"
-                      placeholder="Enter your email"
-                      value={form.email}
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="Enter your phone number"
+                      value={form.phone}
                       onChange={(e) =>
                         setForm({
                           ...form,
-                          email: e.target.value,
+                          phone: e.target.value.replace(/\D/g, ""), // Remove non-numeric characters
                         })
                       }
                       className="w-full bg-transparent py-4 text-[#f5e1ca] outline-none placeholder:text-[#927769]"
                     />
-
                   </div>
                 </div>
+              )}
 
+                    
                 {/* Password */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#f1dfcd]">
@@ -230,11 +321,13 @@ export default function Login() {
                   disabled={loading}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#b75d08] py-4 font-semibold text-white transition hover:bg-[#cf7319] disabled:bg-gray-600"
                 >
-                  {loading ? "Logging in..." : "Login"}
+                  {loading ? "Logging in..." : 
+                  mode === "email" ? "Login with Email" : "Login with Phone"}
                   {!loading && <ArrowRight size={19} />}
                 </button>
 
               </form>
+              {/* forget passwrod here we are next */}
                       <div className="mt-2 flex justify-end">
   <Link
     href="/forgot-password"

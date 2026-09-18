@@ -37,7 +37,7 @@ try{
   const data = await res.json();
   
   if(!res.ok){
-    throw new Error(data.message || "Failed to fetch cart items");
+    return;
   }
 const items = data.data?.items || [];
   const count = items.reduce((acc:number, item:any) => acc + (item.quantity || 0), 0);
