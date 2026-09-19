@@ -49,7 +49,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try{
+
+
     const user = await getcurrentuser();
+    if(!user){
+      return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
+    }
     const body = await req.json();
     const allowedOrderTypes = ["DINE_IN", "PICKUP", "DELIVERY"];
 const allowedPaymentMethods = ["COD", "ONLINE"];
@@ -63,7 +68,7 @@ const {
 
 
 
-if (!address || !phone || !paymentWay || !orderType) {
+if ( !phone || !paymentWay || !orderType) {
   return NextResponse.json(
     {
       success: false,
@@ -100,9 +105,7 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
     { status: 400 }
   );
 }
-    if(!user){
-      return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
-    }
+   
     const cart = await prisma.cart.findUnique({
       where:{
         userId:user.id,
@@ -136,7 +139,7 @@ if (!allowedPaymentMethods.includes(paymentWay)) {
 let discountAmount = 0;
 let finalAmount = totalPrice;
 
-if(couponCode.trim()){
+if(couponCode?.trim()){
   const coupon = await prisma.coupon.findUnique({
     where:{
       code:couponCode.toUpperCase(),
@@ -207,8 +210,17 @@ if(couponCode.trim()){
         cartId:cart.id,
       },
     });
+     await tx.notification.create({
+          data: {
+            userId: user.id,
+            type: "ORDER_UPDATE",
+            title: "Order Confirmed",
+            message: `Your order #${neworder.id} has been placed successfully.`,
+          },
+        });
     return neworder;
   });
+  
  await createactive(user.id,"Order Created",`Order with ID ${order.id} has been created successfully.`);
 
   return NextResponse.json({success:true,data:order},{status:201});
