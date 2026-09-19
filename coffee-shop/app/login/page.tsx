@@ -6,7 +6,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import {
   Mail,
-  phone,
+  Phone,
   Lock,
   Eye,
   EyeOff,
@@ -94,7 +94,7 @@ if(mode === "email"){
       password: "",
       phone: "",
     });
-  }
+  
   setShowPassword(false);
 };
 
@@ -183,13 +183,13 @@ if(mode === "email"){
               </div>
 
 {/* email phone toggle */}
-<div classsName="mb-6 grid grid-cols-2 rounded-xl border border-[#684631] bg-[#2a1811] p-1">
+<div className="mb-6 grid grid-cols-2 rounded-xl border border-[#684631] bg-[#2a1811] p-1">
   <button type="button"
   onClick={() => changeMode("email")}
   className={`flex items-center justify-center gap-2 rounded-lg py-3  text-sm font-semibold transition ${
     mode === "email" ?
     "bg-[#b75d08] text-white shadow-md":
-    "text-{#bda493] hover:bg-[#352016]"
+    "text-[#bda493] hover:bg-[#352016]"
   }`}>
     <Mail size={19} className="text-[#c06b1b]"  />
     Email

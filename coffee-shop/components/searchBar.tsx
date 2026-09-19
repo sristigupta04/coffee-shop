@@ -8,33 +8,40 @@ type Product ={
     name:string;  
     price:number;
    image:string;
+   description:string;
+   category?:string;
 }
 export default function Search(){
     
     const [item, setitem] = useState("");
     const [prod ,setprod]  = useState<Product[]>([]);
     const [load,setload] = useState(true);
+
 const router = useRouter();
 
 useEffect(()=>{
+ 
     const fetching = async()=>{
         if(item.trim() === ""){
             setprod([]);
             setload(false);
             return;
-        
-        
-       
     }
 
 try{
     const res = await fetch("/api/products");
+    if(!res.ok){
+        throw new Error("Failed to fetch products");
+    }
+
     const data = await res.json();
     const newpod = data.data.filter((product:Product)=>
-        product.name.toLowerCase().includes(item.toLowerCase())
+        product.name.toLowerCase().includes(item.toLowerCase()) ||
+    product.description.toLowerCase().includes(item.toLowerCase())
+|| product.category?.toLowerCase().includes(item.toLowerCase())
     );
     setprod(newpod);
-    setload(true);
+    setload(false);
 }catch(error){
     console.error("Error fetching products:", error);
 }
@@ -51,6 +58,12 @@ const handle = (id:string)=>{
 <div className="flex items-center rounded-lg border border-[#d6c4b5] bg-white ">
 <input type="text"
 placeholder="Search for products"
+onKeyDown={(e)=>{
+    if(e.key === "Enter" && item.trim() !== ""){
+        router.push(`/menu?search=${encodeURIComponent(item.trim())}`);
+        setload(false);
+    }
+}}
 value={item}
 onFocus={()=>{ item && setload(true)}}
 onChange={(e)=>setitem(e.target.value)}
@@ -67,7 +80,7 @@ onChange={(e)=>setitem(e.target.value)}
             <div className="absolute left-0 top-full z-50 mt-2 w-full overflow-hidden
             border border-[#eadbc9] bg-white/95 shadow-lg backdrop-blur-sm">
                 {prod.length>0 ?(
-                    prod.map((product)=>(
+                  prod.slice(0,6).map((product)=>(
                         <button 
                         key={product.id}
                         onClick={()=>handle(product.id)}

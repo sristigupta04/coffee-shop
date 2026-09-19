@@ -34,7 +34,7 @@ export async function GET(){
                 return NextResponse.json({message:"Unauthorized"}, {status:401});
             }
             const body = await req.json();
-            const {productId} =  String(body.productId).trim();
+            const productId=  String(body.productId || "").trim();
             if(!productId){
                 return NextResponse.json({message:"Missing productId"}, {status:400});
             }
@@ -82,9 +82,11 @@ export async function GET(){
                 }
                 const existingItem = await prisma.wishlistItem.findUnique({
                     where:{
-                        userId: session.user.id,
-                        productId: productId,
-                    }
+                        userId_productId:{
+                            userId: session.user.id,
+                            productId: productId,
+                        }
+                    },
                 });
                 if(!existingItem){
                     return NextResponse.json({message:"Wishlist item not found"}, {status:404});
@@ -92,8 +94,10 @@ export async function GET(){
 
                 const wishlistItem = await prisma.wishlistItem.delete({
                     where:{
-                        userId: session.user.id,
-                        productId: productId,
+                        userId_productId:{
+                            userId: session.user.id,
+                            productId: productId,
+                        }
                     }
                 });
                 return NextResponse.json({wishlistItem}, {status:200});

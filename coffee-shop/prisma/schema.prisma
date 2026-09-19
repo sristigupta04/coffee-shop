@@ -21,6 +21,7 @@ enum OrderStatus {
   DELIVERED
   CANCELLED
 }
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -28,46 +29,62 @@ enum PaymentStatus {
   PARTIALLY_PAID
   FAILED
   REFUNDED
-} 
-enum AdressType {
+}
+
+enum OrderType {
+  DINE_IN
+  PICKUP
+  DELIVERY
+}
+
+enum AddressType {
   HOME
   WORK
   OTHER
 }
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum NotificationType {
   ORDER_UPDATE
   PROMOTION
   SYSTEM
   GENERAL
 }
+
 enum DiscountType {
   FLAT
   PERCENTAGE
-  
 }
+
 enum RewardTransactionType {
   EARNED
   REDEEMED
   EXPIRED
   ADJUSTMENT
 }
+
 model User {
   id       String  @id @default(cuid())
   name     String
-  email    String  @unique
+  email    String?  @unique
   password String
   role     Role    @default(USER)
   phone    String?
   image    String?
 
-  notificationEnabled Boolean        @default(true)
-  orderUpdates        Boolean        @default(true)
-  promoEmails         Boolean        @default(true)
-  emailNotifications  Boolean        @default(true)
+  notificationEnabled Boolean @default(true)
+  orderUpdates        Boolean @default(true)
+  promoEmails         Boolean @default(true)
+  emailNotifications  Boolean @default(true)
 
-  notifications       Notification[]
-  orders              Order[]
- 
+  notifications Notification[]
+  orders        Order[]
+
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   paymentMethods      PaymentMethod[]
@@ -81,9 +98,6 @@ model User {
   rewardTransactions  RewardTransaction[]
   recentlyViewed      RecentlyViewed[]
   searchHistory       SearchHistory[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@index([phone])
 }
@@ -100,20 +114,25 @@ model Product {
 
   orderItems OrderItem[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  wishlistItems  WishlistItem[]
+  reviews        Review[]
+  recentlyViewed RecentlyViewed[]
+  cartItems      CartItem[]
 
-  cartItems CartItem[]
   @@index([category])
   @@index([isAvailable])
 }
 
 model Order {
-  id                String      @id @default(cuid())
-  userId            String
-  user              User        @relation(fields: [userId], references: [id])
-  totalPrice        Float
-  status            OrderStatus @default(PENDING)
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  totalPrice Float
+  status     OrderStatus @default(PENDING)
+  orderType  OrderType   @default(DELIVERY)
+
   address           String
   phone             String
   paymentWay        String
@@ -123,8 +142,8 @@ model Order {
   razorpayPaymentId String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
-    couponId String?
-  coupon   Coupon? @relation(fields: [couponId], references: [id])
+  couponId          String?
+  coupon            Coupon?     @relation(fields: [couponId], references: [id])
 
   discountAmount Float @default(0)
   deliveryFee    Float @default(0)
@@ -146,6 +165,7 @@ model OrderItem {
 
   quantity Int
   price    Float
+
   @@index([orderId])
   @@index([productId])
 }
@@ -177,11 +197,12 @@ model CartItem {
   @@unique([cartId, productId])
   @@index([productId])
 }
+
 model WishlistItem {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -194,22 +215,23 @@ model WishlistItem {
 }
 
 model Coupon {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  description   String
-  discount      Float
-  discountType  DiscountType @default(PERCENTAGE)
-  minimumAmount Float @default(0)
+  id              String       @id @default(cuid())
+  code            String       @unique
+  description     String
+  discount        Float
+  discountType    DiscountType @default(PERCENTAGE)
+  minimumAmount   Float        @default(0)
   maximumDiscount Float?
-  usageLimit    Int?
-  usedCount     Int      @default(0)
-  orders         Order[]
+  usageLimit      Int?
+  usedCount       Int          @default(0)
+  orders          Order[]
 
-  isActive      Boolean  @default(true)
-  expireDate    DateTime
+  isActive   Boolean  @default(true)
+  expireDate DateTime
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@index([isActive])
   @@index([expireDate])
 }
@@ -229,11 +251,11 @@ model PaymentMethod {
   updatedAt DateTime @updatedAt
 }
 
-model AccountActivity {
+model Address {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   type AddressType @default(HOME)
 
@@ -257,11 +279,12 @@ model AccountActivity {
 
   @@index([userId])
 }
+
 model Review {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -278,11 +301,12 @@ model Review {
   @@index([productId])
   @@index([status])
 }
+
 model AccountActivity {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   action  String
   details String
@@ -291,35 +315,38 @@ model AccountActivity {
 
   @@index([userId])
 }
+
 model PasswordResetToken {
   id String @id @default(cuid())
 
   tokenHash String @unique
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   @@index([userId])
 }
+
 model RewardAccount {
   id String @id @default(cuid())
 
   userId String @unique
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   points Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 model RewardTransaction {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   points Int
 
@@ -332,11 +359,12 @@ model RewardTransaction {
   @@index([userId])
   @@index([createdAt])
 }
+
 model RecentlyViewed {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -346,11 +374,12 @@ model RecentlyViewed {
   @@unique([userId, productId])
   @@index([userId, viewedAt])
 }
+
 model SearchHistory {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   query String
 
@@ -358,6 +387,7 @@ model SearchHistory {
 
   @@index([userId, createdAt])
 }
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String

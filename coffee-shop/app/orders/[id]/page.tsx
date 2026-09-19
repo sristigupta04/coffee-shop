@@ -112,7 +112,64 @@ export default function OrderPage(){
     {new Date(order.createdAt).toLocaleDateString()}
   </span>
 </div>
+{/* Order Tracking */}
+<div className="mt-8 border-t pt-6">
+  <h2 className="text-xl font-bold text-[#3b2115]">
+    Order Tracking
+  </h2>
 
+  {order.status === "CANCELLED" ? (
+    <div className="mt-5 rounded-xl bg-red-50 p-4 text-red-600">
+      ❌ This order has been cancelled.
+    </div>
+  ) : (
+    <div className="mt-6 space-y-5">
+      {[
+        "PENDING",
+        "CONFIRMED",
+        "PREPARING",
+        "READY",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+      ].map((status, index, statuses) => {
+        const currentIndex = statuses.indexOf(order.status);
+        const completed = index <= currentIndex;
+
+        return (
+          <div key={status} className="flex items-center gap-4">
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                completed
+                  ? "bg-[#3b2115] text-white"
+                  : "bg-[#eee4da] text-[#80695b]"
+              }`}
+            >
+              {completed ? "✓" : index + 1}
+            </div>
+
+            <div>
+              <p
+                className={`font-semibold ${
+                  completed
+                    ? "text-[#3b2115]"
+                    : "text-[#80695b]"
+                }`}
+              >
+                {status.replaceAll("_", " ")}
+              </p>
+
+              {index === currentIndex && (
+                <p className="text-sm text-[#8b4a24]">
+                  Current status
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div>
 <div className="mt-6 grid gap-4 border-t pt-4 sm:grid-cols-2">
   <div>
     <p className="text-sm text-[#80695b]">Payment Method</p>

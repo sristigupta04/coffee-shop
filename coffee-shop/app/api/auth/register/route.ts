@@ -44,7 +44,7 @@ export async function POST(req:NextRequest){
             }
         }
         if(cleanPhone){
-            const existingPhoneUser = await prisma.user.findUnique({
+            const existingPhoneUser = await prisma.user.findFirst({
                 where:{
                     phone: cleanPhone,
                 }

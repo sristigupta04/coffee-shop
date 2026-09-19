@@ -10,7 +10,6 @@ import {Heart, ShoppingCart, Trash2 ,ArrowLeft, Loader2 , Coffee} from "lucide-r
 
 
 import {useSession} from "next-auth/react";
-import { is } from "zod/locales";
 type Product ={
     id:string;
     name:string;
@@ -175,14 +174,18 @@ export default function WishlistPage(){
  <article key={item.id}
  className="group overflow-hidden rounded-2xl border border-[#3d271d] bg-[#21120c] transition hover:scale-[1.01]">
     <div className="relative aspect-square overflow-hidden bg-[#2a1811] w-full">
-        <Image src={product.image} alt={product.name}  size ="(max-width: 760px ) 100vw, (max-width: 1200px) 50vw, 25vw" className="object-cover transistion duration-500 group-hover:scale-105"/>
+      {product.image ? (
+        <Image src={product.image} alt={product.name}  
+        fill
+        sizes ="(max-width: 760px ) 100vw, (max-width: 1200px) 50vw, 25vw"
+         className="object-cover transition duration-500 group-hover:scale-105"/>
         ):(
             <div className="flex h-full items-center justify-center">
                 <Coffee size={40} className="text-[#bda493]"/>
             </div>
         )}
         <span className="absolute top-3 right-3 rounded-full bg-[#b75d08] px-3 py-1 text-xs font-semibold text-[#f5e1ca]">
-            ${product.price.toFixed(2)}
+            ₹{product.price.toFixed(2)}
         </span>
          <button
                       type="button"
@@ -191,7 +194,7 @@ export default function WishlistPage(){
                       }
                       disabled={removing === product.id}
                       aria-label="Remove from wishlist"
-                      className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#120805]/85 text-[#e1b78f] backdrop-blur transition hover:bg-red-700 hover:text-white disabled:opacity-50"
+                      className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#120805]/85 text-[#e1b78f] backdrop-blur transition hover:bg-red-700 hover:text-white disabled:opacity-50"
                     >
                       {removing === product.id ? (
                         <Loader2

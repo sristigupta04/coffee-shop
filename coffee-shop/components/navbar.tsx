@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {Heart} from "lucide-react";
 import  Search from "@/components/searchBar";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -15,7 +16,7 @@ import {
 
 export default function Navbar() {
 const pathname = usePathname();
-
+const [wishlistcount, setWishlistcount] = useState(0);
 const [cartcount,setcartcount] = useState(0);
 
 const {status, data: session} = useSession();
@@ -50,6 +51,26 @@ const items = data.data?.items || [];
   };
 
 update();
+const updateWishlistCount = async () => {
+
+  if(!session?.user?.id){
+    setWishlistcount(0);
+    return;
+  }
+  try{
+    const res = await fetch(`/api/wishlist`);
+    if(!res.ok)
+      {
+        return;
+      }
+      const data = await res.json();
+      setWishlistcount(data.wishlist?.length || 0);
+  } catch(error){
+    console.error("Error fetching wishlist count:", error);
+    setWishlistcount(0);
+  }
+  }
+  updateWishlistCount();
 const handlecartUpdate = (event: CustomEvent) => {
   const custoMEvent = event as CustomEvent;
   if(typeof custoMEvent.detail === "number"){
@@ -58,6 +79,7 @@ const handlecartUpdate = (event: CustomEvent) => {
     update();
   }
 }
+
 window.addEventListener(
   "cartUpdated",
   handlecartUpdate as EventListener
@@ -126,6 +148,16 @@ return () => {
             </span>
           </Link>
 
+
+<Link href="/wishlist" className="relative rounded-xl p-3 text-[#4b2e1f] transition hover:bg-[#f3e5d3]">
+<Heart size={22} 
+className= "h-5 w-5"  />
+{wishlistcount > 0 && (
+  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#a85d25] text-xs font-bold text-white">
+    {wishlistcount}
+  </span>
+)}
+</Link>
           {/* Login */}
           <Link
             href="/login"

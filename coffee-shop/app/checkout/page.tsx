@@ -22,6 +22,7 @@ const [couponMessage, setCouponMessage] = useState("");
 const [address, setAddress] = useState("");
 const [phone, setPhone] = useState("");
 const [paymentWay, setPaymentWay] = useState("COD");
+const [orderType, setOrderType] = useState("DELIVERY");
   const router = useRouter();
 const { data: session } = useSession();
 
@@ -100,7 +101,7 @@ const total = cartItems.reduce((acc, item) => {
     }
   }
  const handles = async()=>{
-  if(!address || !address.trim()){
+  if (orderType === "DELIVERY" && (!address || !address.trim())){
     alert("Please fill all the fields");
     return;
   }
@@ -175,8 +176,11 @@ key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID as string,
             razorpay_payment_id:response.razorpay_payment_id,
             razorpay_signature:response.razorpay_signature,
             couponCode:couponCode,
-            address,
-            phone,
+
+            address : orderType === "DELIVERY" ? address : "",
+            phone: phone,
+            orderType: orderType,
+          
           })
         });
         const verifyData = await verifyRes.json();
@@ -213,7 +217,7 @@ router.push(`/orders/${verifyData.data.id}`);
     },
     credentials:'include',
     body:JSON.stringify({
-      address, phone, paymentWay, couponCode,
+      address, phone, paymentWay, couponCode,orderType
     })
   });
   const data = await res.json();
@@ -250,10 +254,11 @@ router.push(`/orders/${data.data.id}`);
         <section className="rounded-3xl bg-white p-6 shadow-sm">
 
           {/* ADDRESS */}
-          <div>
-            <h2 className="text-xl font-semibold text-[#3b2115]">
-              Delivery Address
-            </h2>
+          {orderType === "DELIVERY" && (
+            <div>
+              <h2 className="text-xl font-semibold text-[#3b2115]">
+                Delivery Address
+              </h2>
 
             <textarea
               value={address}
@@ -263,12 +268,14 @@ router.push(`/orders/${data.data.id}`);
               className="mt-4 w-full rounded-xl border border-[#d8c8ba] bg-[#fffdfa] p-3 outline-none focus:border-[#6f4e37]"
             />
           </div>
+          )}
 
           {/* PHONE */}
-          <div className="mt-6">
-            <h2 className="text-xl font-semibold text-[#3b2115]">
-              Phone Number
-            </h2>
+          {orderType !== "DINE_IN" && (
+            <div className="mt-6">
+              <h2 className="text-xl font-semibold text-[#3b2115]">
+                Phone Number
+              </h2>
 
             <input
               type="tel"
@@ -278,7 +285,53 @@ router.push(`/orders/${data.data.id}`);
               className="mt-4 w-full rounded-xl border border-[#d8c8ba] bg-[#fffdfa] p-3 outline-none focus:border-[#6f4e37]"
             />
           </div>
+          )}
+<div className="mt-6">
+  <h2 className="mb-3 text-lg font-bold text-[#3b2115]">
+    Order Type
+  </h2>
 
+  <div className="grid grid-cols-3 gap-3">
+    <button
+      type="button"
+      onClick={() => setOrderType("DELIVERY")}
+      className={`rounded-xl border p-4 ${
+        orderType === "DELIVERY"
+          ? "border-[#6f4e37] bg-[#f3e7dc]"
+          : "border-gray-200 bg-white"
+      }`}
+    >
+      🚚
+      <div className="font-semibold">Delivery</div>
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setOrderType("PICKUP")}
+      className={`rounded-xl border p-4 ${
+        orderType === "PICKUP"
+          ? "border-[#6f4e37] bg-[#f3e7dc]"
+          : "border-gray-200 bg-white"
+      }`}
+    >
+      🏃
+      <div className="font-semibold">Pickup</div>
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setOrderType("DINE_IN")}
+      className={`rounded-xl border p-4 ${
+        orderType === "DINE_IN"
+          ? "border-[#6f4e37] bg-[#f3e7dc]"
+          : "border-gray-200 bg-white"
+      }`}
+    >
+      ☕
+      <div className="font-semibold">Dine-in</div>
+    </button>
+  </div>
+</div>
           {/* PAYMENT */}
           <div className="mt-6">
             <h2 className="text-xl font-semibold text-[#3b2115]">

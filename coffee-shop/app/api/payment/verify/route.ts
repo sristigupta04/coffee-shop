@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       razorpay_payment_id,
       razorpay_signature,
       couponCode,
+      orderType,
       address,
       phone,
     } = body;
@@ -144,10 +145,11 @@ if (!coupon || !coupon.isActive || coupon.expireDate < new Date()){
           userId: user.id,
           totalPrice:finalAmount,
           status:"PENDING",
-          address,
+          orderType,
+          address: orderType === "DELIVERY" ? address : "",
           phone,
           paymentWay: "ONLINE",
-          items:{
+          items: {
             create: cart.items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,

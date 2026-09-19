@@ -51,16 +51,19 @@ export async function POST(req: NextRequest) {
   try{
     const user = await getcurrentuser();
     const body = await req.json();
+    const allowedOrderTypes = ["DINE_IN", "PICKUP", "DELIVERY"];
 const allowedPaymentMethods = ["COD", "ONLINE"];
 const {
   address,
   phone,
   paymentWay,
-  couponCode
+  couponCode,
+  orderType
 } = body;
 
 
-if (!address || !phone || !paymentWay ) {
+
+if (!address || !phone || !paymentWay || !orderType) {
   return NextResponse.json(
     {
       success: false,
@@ -69,7 +72,24 @@ if (!address || !phone || !paymentWay ) {
     { status: 400 }
   );
 }
-
+if(orderType === "DELIVERY" && !address.trim()){
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Address is required for delivery orders",
+    },
+    { status: 400 }
+  );
+}
+if(!allowedOrderTypes.includes(orderType)){
+  return NextResponse.json(
+    {
+      success: false,
+      message: "Invalid order type",
+    },
+    { status: 400 }
+  );
+}
 
 if (!allowedPaymentMethods.includes(paymentWay)) {
   return NextResponse.json(
@@ -146,7 +166,8 @@ if(couponCode.trim()){
             userId:user.id,
             totalPrice:finalAmount,
             status:"PENDING",
-            address,
+            orderType:orderType,
+            address: orderType === "DELIVERY" ? address : "",
             phone,
             paymentWay,
             items:{

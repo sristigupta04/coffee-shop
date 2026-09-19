@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Heart } from "lucide-react";
 import { useSession } from "next-auth/react";
 type Cart = {
   id: string;
@@ -164,6 +165,83 @@ const remove = async (id:string)=>{
   }
   }
    
+  const moveToWishlist = async (item: Cart) => {
+  if (
+    status !== "authenticated" ||
+    !session?.user?.id
+  ) {
+    alert("Please login to use wishlist.");
+    return;
+  }
+
+  try {
+    // Add to wishlist
+    const wishlistRes = await fetch("/api/wishlist", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productId: item.productId,
+      }),
+    });
+
+    const wishlistData = await wishlistRes.json();
+
+    if (!wishlistRes.ok) {
+      throw new Error(
+        wishlistData.message ||
+          "Failed to add to wishlist"
+      );
+    }
+
+    // Remove from cart
+    const cartRes = await fetch(
+      `/api/cart/${session.user.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cartItemId: item.id,
+        }),
+      }
+    );
+
+    const cartData = await cartRes.json();
+
+    if (!cartRes.ok) {
+      throw new Error(
+        cartData.message ||
+          "Failed to remove item from cart"
+      );
+    }
+
+    setcart((prev) => {
+      const updatedCart = prev.filter(
+        (cartItem) => cartItem.id !== item.id
+      );
+
+      cartChanged(updatedCart);
+
+      return updatedCart;
+    });
+
+    alert("Moved to wishlist ❤️");
+  } catch (error) {
+    console.error(
+      "Move to wishlist error:",
+      error
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Something went wrong"
+    );
+  }
+};
   const add = async (id: string) => {
     
    const item = cart.find((item) => item.id === id);
@@ -504,16 +582,27 @@ cartChanged(formattedCart);
 
                           {/* DELETE */}
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              remove(item.id)
-                            }
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#7b8178] transition hover:bg-[#e1e6dc] hover:text-[#40594b]"
-                            aria-label={`Remove ${item.name}`}
-                          >
-                            🗑
-                          </button>
+                         <div className="flex shrink-0 items-center gap-2">
+  <button
+    type="button"
+    onClick={() => moveToWishlist(item)}
+    className="flex h-9 w-9 items-center justify-center rounded-full text-[#7b8178] transition hover:bg-[#e1e6dc] hover:text-[#b75d08]"
+    aria-label={`Move ${item.name} to wishlist`}
+    title="Move to wishlist"
+  >
+    <Heart size={18} />
+  </button>
+
+  <button
+    type="button"
+    onClick={() => remove(item.id)}
+    className="flex h-9 w-9 items-center justify-center rounded-full text-[#7b8178] transition hover:bg-[#e1e6dc] hover:text-[#40594b]"
+    aria-label={`Remove ${item.name}`}
+    title="Remove from cart"
+  >
+    🗑
+  </button>
+</div>
 
                         </div>
 

@@ -15,6 +15,8 @@ type Product = {
   categoryId: string;
   onAddToCart: (quant: number) => void;
   quantity?: number;
+  stock?: number;
+  isAvailable?: boolean;
 };
 
  function MenuContent(){
@@ -23,6 +25,8 @@ type Product = {
   const [category, setCategory] = useState("All");
   const searchParams = useSearchParams();
   const searchTerm = searchParams.get("search") || "";
+  const [sortBy, setSortBy] = useState("default");
+  const [availableOnly, setAvailableOnly] = useState(false);
   const { status, data: session } = useSession();
 
   useEffect(()=>{
@@ -37,6 +41,8 @@ type Product = {
       description:product.description,
       imageUrl:product.image,
       categoryId:product.category,
+      stock:product.stock,
+      isAvailable:product.isAvailable
       }) );
       setprod(newprod);
       
@@ -87,12 +93,45 @@ type Product = {
 
  const allsearch= prod.filter((product)=> {
   const filter = category === "All"|| product.categoryId === category;
-const match = searchTerm === "" || product.name.toLowerCase().includes(searchTerm.toLowerCase());
+const match = searchTerm === "" || 
+product.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+product.categoryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+product.name.toLowerCase().includes(searchTerm.toLowerCase());
   
   return   filter && match;
   });
+  const sortedProducts = [...allsearch].sort((a, b) => {
+  switch (sortBy) {
+    case "price-low":
+      return a.price - b.price;
 
-  const itemrelated = searchTerm ? prod.filter((product)=> !allsearch.some((item)=> item.id === product.id)) :[];
+    case "price-high":
+      return b.price - a.price;
+
+    case "name-az":
+      return a.name.localeCompare(b.name);
+
+    case "name-za":
+      return b.name.localeCompare(a.name);
+
+    default:
+      return 0;
+  }
+});
+
+ const itemrelated = searchTerm
+  ? prod.filter((product) => {
+      const term = searchTerm.toLowerCase();
+
+      return (
+        !allsearch.some((item) => item.id === product.id) &&
+        (
+          product.categoryId.toLowerCase().includes(term) ||
+          product.name.toLowerCase().includes(term)
+        )
+      );
+    }).slice(0, 6)
+  : [];
   return(
  <main className="min-h-screen bg-[#f8f3ed] px-6 py-10 sm:px-4 md:px-8">
   {/* menu ka uper wala part */}
@@ -136,6 +175,20 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
  onCategory={(category:string)=>setCategory(category)}
 />
 
+<div className="mx-auto mt-6 flex max-w-6xl flex-wrap items-center justify-between gap-4">
+  <select
+    value={sortBy}
+    onChange={(e) => setSortBy(e.target.value)}
+    className="rounded-lg border border-[#d6c4b5] bg-white px-4 py-2 text-sm text-[#3b2115] outline-none"
+  >
+    <option value="default">Sort By</option>
+    <option value="price-low">Price: Low to High</option>
+    <option value="price-high">Price: High to Low</option>
+    <option value="name-az">Name: A to Z</option>
+    <option value="name-za">Name: Z to A</option>
+  </select>
+</div>
+
 {/* product loading */}
 
 <section className="mx-auto mt-10 max-w-6xl">
@@ -174,7 +227,7 @@ const match = searchTerm === "" || product.name.toLowerCase().includes(searchTer
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {allsearch.length >0? (
 
-       allsearch.map((product)=>(
+       sortedProducts.map((product)=>(
 
         <MenuCard
         key={product.id}

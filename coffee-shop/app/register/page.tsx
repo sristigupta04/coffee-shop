@@ -14,7 +14,7 @@ type Form = {
 export default function Register() {
   const router = useRouter();
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<Form>({
     name: "",
     email: "",
     phone: "",
@@ -96,10 +96,8 @@ export default function Register() {
 <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-10">
   <div className="grid w-full max-w-6xl overflow-hidden rounded-[30px] border border-[#704326] bg-[#1c0d08] shadow-2xl lg:grid-cols-2">
 
-    <div className="relative hidden min-h-[650px] overflow-hidden bg-cover bg-center lg:block">
-
-      {/* left sidey */}
-      <style = {{
+    <div className="relative hidden min-h-[650px] overflow-hidden bg-cover bg-center lg:block"
+      style = {{
         backgroundImage: "url('/register-bg.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -220,13 +218,12 @@ export default function Register() {
                   <div className="flex items-center rounded-xl border border-[#684631] bg-[#2a1811] px-4 focus-within:border-[#c06b1b]">
                     <Phone
                       size={19}
-                      inputMode="numeric"
-                      maxLength={10}
-                      placeholder="Enter your phone number"
                       className="mr-3 text-[#c06b1b]"
                     />
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       placeholder="Enter your phone number"
                       value={form.phone}
                       onChange={(e) =>
@@ -237,8 +234,7 @@ export default function Register() {
                       }
                       className="w-full bg-transparent py-4 text-[#f5e1ca] outline-none placeholder:text-[#927769]"
                     />
-                  </div>
-                </div>
+                    </div>
                     
 
 </div>
