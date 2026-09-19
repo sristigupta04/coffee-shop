@@ -140,7 +140,7 @@ window.dispatchEvent(new CustomEvent("cartUpdated"));
         transition hover:-translate-y-1 hover:shadow-md
       "
     >
-      {/* ========================================
+      {/* ===================
           IMAGE
       ======================================== */}
 

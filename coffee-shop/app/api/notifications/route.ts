@@ -39,10 +39,16 @@ export async function POST(req: NextRequest) {
         if(!user){
             return NextResponse.json({message:"Unauthorized"}, {status:401});
         }
+        if (user.role !== "ADMIN") {
+            return NextResponse.json(
+                { message: "Forbidden" },
+                { status: 403 }
+            );
+        }
         const body = await req.json();
-        const {title, message} = body;
+        const {title, message, userId, type} = body;
         
-    if (!title?.trim() || !message?.trim()) {
+    if ( !userId || !title?.trim() || !message?.trim()) {
       return NextResponse.json(
         {
           success: false,
@@ -53,10 +59,12 @@ export async function POST(req: NextRequest) {
     }
         const notification = await prisma.notification.create({
             data:{
-                userId:user.id,
-                title,
-                message,
+                userId,
+                title : title.trim(),
+                message : message.trim(),
+                ...(type ? {type}: {}),
             },
+              
         });
         return NextResponse.json({data:notification}, {status:201});
             }

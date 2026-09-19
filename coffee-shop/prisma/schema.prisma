@@ -51,9 +51,9 @@ enum ReviewStatus {
 
 enum NotificationType {
   ORDER_UPDATE
-  PROMOTION
+  PAYMENT
   SYSTEM
-  GENERAL
+  SECURITY
 }
 
 enum DiscountType {
@@ -71,7 +71,7 @@ enum RewardTransactionType {
 model User {
   id       String  @id @default(cuid())
   name     String
-  email    String?  @unique
+  email    String? @unique
   password String
   role     Role    @default(USER)
   phone    String?
@@ -389,11 +389,16 @@ model SearchHistory {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
+  type      NotificationType @default(ORDER_UPDATE)
   title     String
   message   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }

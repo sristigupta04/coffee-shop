@@ -25,7 +25,7 @@ type Product = {
   const [category, setCategory] = useState("All");
   const searchParams = useSearchParams();
   const searchTerm = searchParams.get("search") || "";
-  const [sortBy, setSortBy] = useState("default");
+  const [sort, setSort] = useState("default");
   const [availableOnly, setAvailableOnly] = useState(false);
   const { status, data: session } = useSession();
 
@@ -101,7 +101,7 @@ product.name.toLowerCase().includes(searchTerm.toLowerCase());
   return   filter && match;
   });
   const sortedProducts = [...allsearch].sort((a, b) => {
-  switch (sortBy) {
+  switch (sort) {
     case "price-low":
       return a.price - b.price;
 
@@ -174,19 +174,60 @@ product.name.toLowerCase().includes(searchTerm.toLowerCase());
  categoryChecked={category}
  onCategory={(category:string)=>setCategory(category)}
 />
+<div className="flex items-center gap-3">
 
-<div className="mx-auto mt-6 flex max-w-6xl flex-wrap items-center justify-between gap-4">
-  <select
-    value={sortBy}
-    onChange={(e) => setSortBy(e.target.value)}
-    className="rounded-lg border border-[#d6c4b5] bg-white px-4 py-2 text-sm text-[#3b2115] outline-none"
-  >
-    <option value="default">Sort By</option>
-    <option value="price-low">Price: Low to High</option>
-    <option value="price-high">Price: High to Low</option>
-    <option value="name-az">Name: A to Z</option>
-    <option value="name-za">Name: Z to A</option>
-  </select>
+  <div className="relative">
+    <select
+      value={sort}
+      onChange={(e) => setSort(e.target.value)}
+      className="
+        appearance-none
+        min-w-[190px]
+        cursor-pointer
+        border
+        border-[#d8cbbf]
+        bg-[#fcfaf6]
+        px-5
+        py-3
+        pr-10
+        text-sm
+        font-medium
+        text-[#3b2115]
+        outline-none
+        transition-all
+        duration-200
+        hover:border-[#8b6248]
+        focus:border-[#6f4e37]
+      "
+    >
+      <option value="">Recommended</option>
+      <option value="price-low">
+        Price: Low to High
+      </option>
+      <option value="price-high">
+        Price: High to Low
+      </option>
+      <option value="name-asc">
+        Name: A — Z
+      </option>
+      <option value="name-desc">
+        Name: Z — A
+      </option>
+    </select>
+
+    <span
+      className="
+        pointer-events-none
+        absolute
+        right-4
+        top-1/2
+        -translate-y-1/2
+        text-[#6f4e37]
+      "
+    >
+      ↓
+    </span>
+  </div>
 </div>
 
 {/* product loading */}

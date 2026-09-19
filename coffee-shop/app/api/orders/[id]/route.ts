@@ -17,18 +17,26 @@ export async function GET(req:NextRequest,{params}:params){
         if(!user){
             return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
         }
-        const order = await prisma.order.findUnique({
-            where:{
-                id,
+       const order = await prisma.order.findUnique({
+    where: {
+        id,
+    },
+    include: {
+        items: {
+            include: {
+                product: true,
             },
-            include:{
-                items:{
-                    include:{
-                        product:true,
-                    }
-                }
-            }
-        });
+        },
+        user: {
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+            },
+        },
+    },
+});
         if(!order){
             return NextResponse.json({success:false,message:"Order not found"},{status:404});
         }
