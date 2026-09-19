@@ -166,6 +166,11 @@ const remove = async (id:string)=>{
   }
    
   const moveToWishlist = async (item: Cart) => {
+    if (!item.productId) {
+  console.error("Missing productId:", item);
+  alert("Product ID is missing");
+  return;
+}
   if (
     status !== "authenticated" ||
     !session?.user?.id
@@ -189,11 +194,17 @@ const remove = async (id:string)=>{
     const wishlistData = await wishlistRes.json();
 
     if (!wishlistRes.ok) {
+      if(wishlistRes.status === 400 && wishlistData.message === "Product already in wishlist") 
+        {
+          
+        }
+        else{
       throw new Error(
         wishlistData.message ||
           "Failed to add to wishlist"
       );
     }
+  }
 
     // Remove from cart
     const cartRes = await fetch(

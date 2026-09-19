@@ -50,7 +50,7 @@ export default function WishlistPage(){
                 throw new Error("Failed to fetch wishlist");
             }
             const data = await res.json();
-            setItems(data.data || []);
+            setItems(data.wishlist|| []);
         } catch (error) {
             console.error("Error fetching wishlist:", error);
         } finally{
@@ -64,7 +64,7 @@ export default function WishlistPage(){
     const removeFromWishlist = async(productId:string)=>{
         setRemoving(productId);
         try{
-            const res = await fetch(`/api/wishlist/${productId}`, {
+            const res = await fetch(`/api/wishlist`, {
                 method:"DELETE",
                 headers:{
                     "Content-Type":"application/json",
@@ -87,8 +87,8 @@ export default function WishlistPage(){
     const addToCart = async(productId:string)=>{
         setCartLoading(productId);
         try{
-            const res = await fetch("/api/cart", {
-                method:"POST",
+            const res = await fetch(`/api/cart/${session?.user?.id}`, {
+                method:"PUT",
                 headers:{
                     "Content-Type":"application/json",
                 },
@@ -184,27 +184,8 @@ export default function WishlistPage(){
                 <Coffee size={40} className="text-[#bda493]"/>
             </div>
         )}
-        <span className="absolute top-3 right-3 rounded-full bg-[#b75d08] px-3 py-1 text-xs font-semibold text-[#f5e1ca]">
-            ₹{product.price.toFixed(2)}
-        </span>
-         <button
-                      type="button"
-                      onClick={() =>
-                        removeFromWishlist(product.id)
-                      }
-                      disabled={removing === product.id}
-                      aria-label="Remove from wishlist"
-                      className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#120805]/85 text-[#e1b78f] backdrop-blur transition hover:bg-red-700 hover:text-white disabled:opacity-50"
-                    >
-                      {removing === product.id ? (
-                        <Loader2
-                          size={18}
-                          className="animate-spin"
-                        />
-                      ) : (
-                        <Trash2 size={18} />
-                      )}
-                    </button>
+      
+                
 
                     {/* OUT OF STOCK */}
                     {isOutOfStock && (
