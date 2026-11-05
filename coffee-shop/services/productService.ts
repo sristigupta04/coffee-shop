@@ -1,6 +1,7 @@
 
 import { Product } from "@/types/product";
 import {NextRequest, NextResponse} from "next/server";
+import it from "zod/v4/locales/it.js";
 export async function  prod(req:NextRequest){
   const res= await fetch("http://localhost:3000/api/products");
   const result = await res.json();
@@ -72,4 +73,4 @@ export async function deleteprod(req:NextRequest){
     })
   }
 }
- 
+  

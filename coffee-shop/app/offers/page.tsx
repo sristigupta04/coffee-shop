@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 
-import Offer from "../../components/offers/card";
+import Offer from "../../components/offers/OfferCard";
 
 type OfferType ={
     id:number;

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -50,9 +51,7 @@ export default function ProductsPage() {
       "Are you sure you want to delete this product?"
     );
 
-    if (!confirmDelete) {
-      return;
-    }
+    if (!confirmDelete) return;
 
     try {
       const res = await fetch(`/api/products/${id}`, {
@@ -87,11 +86,10 @@ export default function ProductsPage() {
 
   return (
     <main className="min-h-screen bg-[#f8f3ed] px-4 py-10 sm:px-6 lg:px-8">
-      
-      {/* Header */}
       <section className="mx-auto max-w-7xl">
+
+        {/* Header */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          
           <div>
             <h1 className="text-3xl font-bold text-[#3b2115] sm:text-4xl">
               Products
@@ -102,7 +100,6 @@ export default function ProductsPage() {
             </p>
           </div>
 
-          {/* Add Product */}
           <button
             onClick={() => router.push("/admin/products/create")}
             className="rounded-lg bg-[#8b4a24] px-5 py-3 font-semibold text-white transition hover:bg-[#6f351c]"
@@ -111,7 +108,7 @@ export default function ProductsPage() {
           </button>
         </div>
 
-        {/* Empty */}
+        {/* Empty State */}
         {products.length === 0 ? (
           <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
             <p className="text-[#80695b]">
@@ -173,26 +170,38 @@ export default function ProductsPage() {
                     Category: {product.category}
                   </p>
 
-                  {/* Actions */}
-                  <div className="flex gap-3">
+                  {/* Edit & Customization */}
+                  <div className="mb-3 grid grid-cols-2 gap-3">
                     <button
                       onClick={() =>
                         router.push(
                           `/admin/products/edit/${product.id}`
                         )
                       }
-                      className="flex-1 rounded-lg bg-[#6f4e37] px-4 py-2 font-medium text-white transition hover:bg-[#523727]"
+                      className="rounded-lg bg-[#6f4e37] px-3 py-2.5 text-sm font-medium text-white transition hover:bg-[#523727]"
                     >
-                      Edit
+                      Edit Product
                     </button>
 
                     <button
-                      onClick={() => deleteProduct(product.id)}
-                      className="flex-1 rounded-lg border border-red-300 px-4 py-2 font-medium text-red-600 transition hover:bg-red-50"
+                      onClick={() =>
+                        router.push(
+                          `/admin/products/${product.id}/customizations`
+                        )
+                      }
+                      className="rounded-lg border border-[#c69a78] bg-[#f8f3ed] px-3 py-2.5 text-sm font-semibold text-[#754426] transition hover:bg-[#eaded4]"
                     >
-                      Delete
+                      Customize ☕
                     </button>
                   </div>
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => deleteProduct(product.id)}
+                    className="w-full rounded-lg border border-red-300 px-4 py-2.5 font-medium text-red-600 transition hover:bg-red-50"
+                  >
+                    Delete Product
+                  </button>
                 </div>
               </div>
             ))}

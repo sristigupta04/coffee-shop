@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Setting from "../../../components/setting/Setting";
+import Setting from "../../../components/settings/Settings";
     
 export default function Personal(){
           const [notification, setNotification] = useState(true);

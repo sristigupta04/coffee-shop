@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import MenuCard from "@/components/Menu/MenuCard";
 import  Store from "@/components/Menu/StoreBar";
-import Categoryhead from "@/components/Menu/categoryNav";
+import Categoryhead from "@/components/Menu/CategoryNav";
 type Product = {
   id: string;
   name: string;

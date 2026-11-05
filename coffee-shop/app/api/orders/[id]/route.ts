@@ -1,34 +1,44 @@
-import {NextRequest, NextResponse} from "next/server";
+
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getcurrentuser } from "@/app/lib/auth";
-import Order from "@/app/orders/page";
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
 
-type params ={
-    params:Promise<{id:string}>
-}
+export async function GET(
+  req: NextRequest,
+  { params }: RouteContext
+) {
+  try {
+    const { id } = await params;
 
-export async function GET(req:NextRequest,{params}:params){
-    try{
-        const {id} = await params;
-        if(!id){
-            return NextResponse.json({success:false,message:"Missing required fields"},{status:400});
-        }
-        const user = await getcurrentuser();
-        if(!user){
-            return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
-        }
-        const order = await prisma.order.findUnique({
-            where:{
-                id,
-            },
-            include:{
-                items:{
-                    include:{
-                        product:true,
-                    }
-                },
-          user: {
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: "Order ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const user = await getcurrentuser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        user: {
           select: {
             id: true,
             name: true,
@@ -36,133 +46,196 @@ export async function GET(req:NextRequest,{params}:params){
             phone: true,
           },
         },
-    },
-        });
-        if(!order){
-            return NextResponse.json({success:false,message:"Order not found"},{status:404});
-        }
-        if(user.role !== "ADMIN" && order.userId !== user.id){
-            return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
-        }
-        return NextResponse.json({success:true,data:order},{status:200});
-    } catch (error) {
-        console.error("Order fetch error:",error);
-        return NextResponse.json({success:false,message:"Internal Server Error"},{status:500});
-    }
-    }
-
-
-    export async function PATCH(req:NextRequest,{params}:params){
-        try{
-const {id} = await params;
-if(!id){
-    return NextResponse.json({success:false,message:"Missing required fields"},{status:400});
-}
-
-const user= await getcurrentuser();
-if(!user){
-    return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
-}
-const order = await prisma.order.findUnique({
-    where:{
-        id,
-    },
-   
-            include:{
- items:true,
-            }
-});
-if(!order){ 
-    return NextResponse.json({success:false,message:"Order not found"},{status:404});
-}
-
-const body = await req.json();
-if(user.role === "USER"){
-    if(order.userId !== user.id){
-        return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
-    }
-    if(order.status !== "PENDING"){
-        return NextResponse.json({success:false,message:"Cannot update order status"},{status:400});
-    }
-
-
-
-const update = await prisma.$transaction(async(tx)=>{
-    const updatedOrder = await tx.order.update({
-        where:{
-            id,
-        },
-        data:{
-            status:"CANCELLED",
-        },
+      },
     });
-    for (const item of order.items){
-        await tx.product.update({
-            where:{
-                id:item.productId,
-            },
-            data:{
-                stock:{
-                    increment:item.quantity,
-                }
-            }
-        });
-    }
-    await tx.notification.create({
-          data: {
-            userId: order.userId,
-            type: "ORDER_UPDATE",
-            title: "Order Cancelled",
-            message: `Your order #${order.id} has been cancelled successfully.`,
-          },
-        });
-    return updatedOrder;
-});
-return NextResponse.json({success:true,data:update},{status:200});
-}
-if(user.role === "ADMIN"){
- const {status} = body;
- const allowedStatuses = ["PENDING","COMPLETED","CANCELLED"];
- if(!status || !allowedStatuses.includes(status)){
-    return NextResponse.json({success:false,message:"Invalid status"},{status:400});
- }
 
- if(order.status === status){
-    return NextResponse.json({success:false, data:Order},{status:400});
- }
- const updatedOrder = await prisma.order.update({
-    where:{
-        id,
-    },
-    data:{
-        status
+    if (!order) {
+      return NextResponse.json(
+        { success: false, message: "Order not found." },
+        { status: 404 }
+      );
     }
- });
- const statusMessages:Record<string,string> = {
-    "PENDING":"Your order is now pending.",
-    "COMPLETED":"Your order has been completed successfully.",
-    "CANCELLED":"Your order has been cancelled."
-    };
-    await prisma.notification.create({
+
+    if (user.role !== "ADMIN" && order.userId !== user.id) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized." },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json(
+      { success: true, data: order },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("[ORDER_GET_ERROR]", error);
+
+    return NextResponse.json(
+      { success: false, message: "Unable to fetch order." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: RouteContext
+) {
+  try {
+    const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: "Order ID is required." },
+        { status: 400 }
+      );
+    }
+
+    const user = await getcurrentuser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized." },
+        { status: 401 }
+      );
+    }
+
+    // Admin status changes are handled by the admin order API.
+    if (user.role !== "USER") {
+      return NextResponse.json(
+        { success: false, message: "Use the admin order API for status updates." },
+        { status: 403 }
+      );
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) {
+      return NextResponse.json(
+        { success: false, message: "Order not found." },
+        { status: 404 }
+      );
+    }
+
+    if (order.userId !== user.id) {
+      return NextResponse.json(
+        { success: false, message: "You cannot cancel this order." },
+        { status: 403 }
+      );
+    }
+
+    if (order.status !== "PENDING") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Only pending orders can be cancelled.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // A paid order must go through refund handling, not this cancellation path.
+    if (order.paymentStatus === "PAID" ||
+        order.paymentStatus === "VERIFYING") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This payment requires the refund process.",
+        },
+        { status: 409 }
+      );
+    }
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      // Atomic guard prevents two cancellation requests from processing together.
+      const cancellation = await tx.order.updateMany({
+        where: {
+          id,
+          userId: user.id,
+          status: "PENDING",
+          paymentStatus: {
+            notIn: ["PAID", "VERIFYING"],
+          },
+        },
         data: {
-          userId: order.userId,
-          type: "ORDER_UPDATE",
-          title: "Order Status Updated",
-          message:
-            statusMessages[status] ||
-            `Your order #${order.id} status has been updated.`,
+          status: "CANCELLED",
         },
       });
 
- return NextResponse.json({success:true,data:updatedOrder},{status:200});
-}
-return NextResponse.json({success:false,message:"Unauthorized"},{status:401});
+      if (cancellation.count === 0) {
+        throw new Error("ORDER_ALREADY_UPDATED");
+      }
 
-        } catch (error) {
-            console.error("Order update error:",error);
-            return NextResponse.json({success:false,message:"Internal Server Error"},{status:500});
+      // Restore stock only if it was previously deducted.
+      if (order.stockDeducted) {
+        for (const item of order.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stock: {
+                increment: item.quantity,
+              },
+            },
+          });
         }
+
+        await tx.order.update({
+          where: { id },
+          data: {
+            stockDeducted: false,
+          },
+        });
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: order.userId,
+          type: "ORDER_UPDATE",
+          title: "Order Cancelled",
+          message: `Your order #${order.id} has been cancelled successfully.`,
+        },
+      });
+
+      return tx.order.findUnique({
+        where: { id },
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      });
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Order cancelled successfully.",
+        data: updatedOrder,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    if (error instanceof Error &&
+        error.message === "ORDER_ALREADY_UPDATED") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Order was already updated. Please refresh.",
+        },
+        { status: 409 }
+      );
     }
 
+    console.error("[ORDER_CANCEL_ERROR]", error);
 
-
+    return NextResponse.json(
+      { success: false, message: "Unable to cancel order." },
+      { status: 500 }
+    );
+  }
+}

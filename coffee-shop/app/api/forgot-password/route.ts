@@ -24,12 +24,13 @@ export async function POST(req: NextRequest) {
     });
 
     // Don't reveal whether email exists
-    if (!user) {
-      return NextResponse.json({
-        success: true,
-        message: "If this email exists, a reset link has been sent.",
-      });
-    }
+   // Don't reveal whether email exists
+if (!user || !user.email) {
+  return NextResponse.json({
+    success: true,
+    message: "If this email exists, a reset link has been sent.",
+  });
+}
 
     // Delete old reset tokens for this user
     await prisma.passwordResetToken.deleteMany({

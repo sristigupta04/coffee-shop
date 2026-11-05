@@ -1,0 +1,13 @@
+./prisma/migrations/20260804211023_init/migration.sql
+./prisma/migrations/20260819090935_init/migration.sql
+./prisma/migrations/20260819104523_add_cart/migration.sql
+./prisma/migrations/20260819185156_add_checkout_details/migration.sql
+./prisma/migrations/20260819191450_add_online_payment_fields/migration.sql
+./prisma/migrations/20260820095048_add_coupon/migration.sql
+./prisma/migrations/20260820161305_add_user_preferences/migration.sql
+./prisma/migrations/20260820172619_add_payment_methods/migration.sql
+./prisma/migrations/20260820181646_add_account_activity/migration.sql
+./prisma/migrations/20260821195521_add_account_activity/migration.sql
+./prisma/migrations/migration_lock.toml
+./prisma/schema.prisma
+./prisma/seed.ts

@@ -1,196 +1,323 @@
-"use client"
 
-import {  useEffect ,useState } from "react";
+"use client";
 
-// import product from MenuCard
-type product ={
-    onSubmit :(product :{
-    name:string;
-    price:number;
-    description:string;
-   image:string;
-   category:string;
-   stock:number;
-   isAvailable:boolean;
-})=>void;
+import { useEffect, useState } from "react";
 
-initialval?:{
-    name:string;
-    price:number;
-    description:string;
-    image:string;
-category:string;
-    stock:number;
-    isAvailable:boolean;
-}|null;
-btntext?:string;
-}
-export default function Productform({
-    onSubmit,
-    initialval,
-    btntext
-}:product){
+export type ProductFormData = {
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  categoryId: string;
+  stock: number;
+  isAvailable: boolean;
+};
 
+type Category = {
+  id: string;
+  name: string;
+  slug: string;
+};
 
-    const[ form, setform] = useState({
-        name:"",
-        price:0,    
-    description:"",
-    image:"",
-    category:"",
-    stock:0,
-    isAvailable:true,
-    });
+type ProductFormProps = {
+  onSubmit: (product: ProductFormData) => void | Promise<void>;
+  initialval?: ProductFormData | null;
+  btntext?: string;
+};
 
-    useEffect(() => {
-  if (initialval) {
-    setform(initialval);
+const emptyForm: ProductFormData = {
+  name: "",
+  description: "",
+  price: 0,
+  image: "",
+  categoryId: "",
+  stock: 0,
+  isAvailable: true,
+};
+
+export default function ProductForm({
+  onSubmit,
+  initialval,
+  btntext = "Save Product",
+}: ProductFormProps) {
+  const [form, setForm] = useState<ProductFormData>(
+    initialval ?? emptyForm
+  );
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  // Fetch categories
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const response = await fetch("/api/categories");
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || "Failed to load categories.");
+        }
+
+        setCategories(result.categories ?? []);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load categories."
+        );
+      } finally {
+        setLoadingCategories(false);
+      }
+    }
+
+    fetchCategories();
+  }, []);
+
+  // Update form when editing an existing product
+  useEffect(() => {
+    setForm(initialval ?? emptyForm);
+  }, [initialval]);
+
+  function handleChange(
+    event: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) {
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]:
+        name === "price" || name === "stock"
+          ? Number(value)
+          : value,
+    }));
   }
-}, [initialval]);
 
+  function handleAvailability(checked: boolean) {
+    setForm((previous) => ({
+      ...previous,
+      isAvailable: checked,
+    }));
+  }
 
-const handle =(
-    e:React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-)=>{
-    const {name,value} = e.target;
-    setform((prev)=>({
-        ...prev,
-        [name]:name ==="price" || name ==="stock"
-        ? Number(value) : value,
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+    setError("");
 
-    }))
-}   
+    if (!form.categoryId) {
+      setError("Please select a category.");
+      return;
+    }
 
-const submit = (e:React.FormEvent<HTMLFormElement>)=>{
-    e.preventDefault();
-    onSubmit(form);
-}
+    if (form.price <= 0 || !Number.isFinite(form.price)) {
+      setError("Please enter a valid price.");
+      return;
+    }
 
+    if (!Number.isInteger(form.stock) || form.stock < 0) {
+      setError("Stock must be a non-negative integer.");
+      return;
+    }
 
-return (
-    <form 
-    onSubmit={submit}
-      className="mx-auto flex w-full max-w-lg flex-col gap-5 rounded-2xl bg-white p-8 shadow-lg">
+    try {
+      setSubmitting(true);
+      await onSubmit(form);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-<h1 className="text-3xl font-bold text-[#3b2115]">
-  {btntext === "Update Product"
-    ? "Edit Product"
-    : "Add New Product"}
-</h1>
-        {/* product name  */}
-        <div>
-            <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-                Product Name
-            </label>
-        
+  const inputClass =
+    "w-full rounded-lg border border-[#EADED4] bg-white px-4 py-3 text-sm text-[#2B1B14] outline-none transition focus:border-[#754426] focus:ring-2 focus:ring-[#754426]/10";
+
+  const labelClass =
+    "mb-2 block text-sm font-medium text-[#2B1B14]";
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 rounded-2xl border border-[#EADED4] bg-white p-6 shadow-sm"
+    >
+      <div>
+        <h2 className="text-xl font-semibold text-[#2B1B14]">
+          Product Information
+        </h2>
+        <p className="mt-1 text-sm text-[#80695B]">
+          Add or update your BrewBites product details.
+        </p>
+      </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Product Name */}
+      <div>
+        <label htmlFor="name" className={labelClass}>
+          Product Name *
+        </label>
         <input
-        type="text"
-        name="name"
-        value={form.name}
-        onChange={handle}
-        placeholder="Product Name"
-        className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/></div>
+          id="name"
+          name="name"
+          type="text"
+          required
+          maxLength={150}
+          value={form.name}
+          onChange={handleChange}
+          placeholder="Enter product name"
+          className={inputClass}
+        />
+      </div>
 
-        {/* product price  */}
+      {/* Description */}
+      <div>
+        <label htmlFor="description" className={labelClass}>
+          Description *
+        </label>
+        <textarea
+          id="description"
+          name="description"
+          required
+          rows={4}
+          value={form.description}
+          onChange={handleChange}
+          placeholder="Describe your product..."
+          className={inputClass}
+        />
+      </div>
+
+      {/* Category */}
+      <div>
+        <label htmlFor="categoryId" className={labelClass}>
+          Category *
+        </label>
+
+        <select
+          id="categoryId"
+          name="categoryId"
+          required
+          value={form.categoryId}
+          onChange={handleChange}
+          disabled={loadingCategories}
+          className={inputClass}
+        >
+          <option value="">
+            {loadingCategories
+              ? "Loading categories..."
+              : "Select a category"}
+          </option>
+
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+
+        {!loadingCategories && categories.length === 0 && (
+          <p className="mt-2 text-xs text-red-600">
+            No active categories found. Please create a category first.
+          </p>
+        )}
+      </div>
+
+      {/* Price and Stock */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
-
-            <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-                Product Price
-            </label>
-            <input
-            type="number"   
+          <label htmlFor="price" className={labelClass}>
+            Price (₹) *
+          </label>
+          <input
+            id="price"
             name="price"
+            type="number"
+            min="0.01"
+            step="0.01"
+            required
             value={form.price}
-            onChange={handle}
-            placeholder="Product Price"
-            className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/>
+            onChange={handleChange}
+            className={inputClass}
+          />
         </div>
 
-
-
-        {/* product description  */}
         <div>
-            <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-                Product Description         
-    </label>
+          <label htmlFor="stock" className={labelClass}>
+            Stock Quantity *
+          </label>
+          <input
+            id="stock"
+            name="stock"
+            type="number"
+            min="0"
+            step="1"
+            required
+            value={form.stock}
+            onChange={handleChange}
+            className={inputClass}
+          />
+        </div>
+      </div>
 
-            <textarea
-            name="description"
-            value={form.description}
-            onChange={handle}
-            placeholder="Product Description"
-            className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/>
-        </div>  
-
-
-        {/* category */}
-
-<div>
-
-
-            <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-                Product Category
-            </label>                    
-            <input 
-            type="text"
-            name="category"
-            value={form.category}
-            onChange={handle}
-            placeholder="Product Category"
-            className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/>
-
-</div>
-
-
-{/* imgae wala sections */}
-
-<div>
-
-            <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-                Product Image URL
-            </label>
-                <input 
-                type="text"
-                name="image"
-                value={form.image}   
-                onChange={handle}
-                placeholder="Product Image URL"
-                className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/>
-                
-</div>
-
-{/* stockk  fileds */}
-<div >
-
-
-    <label className="mb-2 block text-sm font-medium text-[#3b2115]">
-        Product Stock
-    </label>
-    <input 
-    type="number"
-    name="stock"
-    value={form.stock}
-    onChange={handle}
-    placeholder="Product Stock"
-    className="w-full rounded-lg border border-[#d6c4b5] px-4 py-3 outline-none focus:border-[#8b4a24]"/>
-</div>
-<div >
-
-    <label className="flex items-center gap-3 text-sm font-medium text-[#3b2115]">
-        <input 
-        type="checkbox"
-        name="isAvailable"
-        checked={form.isAvailable}
-        onChange={(e)=>setform((prev)=>({       
-            ...prev,
-            isAvailable:e.target.checked,
-        }))}
+      {/* Image */}
+      <div>
+        <label htmlFor="image" className={labelClass}>
+          Product Image Path *
+        </label>
+        <input
+          id="image"
+          name="image"
+          type="text"
+          required
+          value={form.image}
+          onChange={handleChange}
+          placeholder="/coffee1.jpg"
+          className={inputClass}
         />
-        Product is Available
-    </label>
-</div>
-<button 
-type="submit"
-className="rounded-lg bg-[#8b4a24] px-4 py-2 text-white hover:bg-[#6f351c]">{btntext || "Add Product"}</button></form>
-)
+      </div>
+
+      {/* Availability */}
+      <label className="flex cursor-pointer items-center gap-3">
+        <input
+          type="checkbox"
+          checked={form.isAvailable}
+          onChange={(event) =>
+            handleAvailability(event.target.checked)
+          }
+          className="h-4 w-4 accent-[#754426]"
+        />
+        <span className="text-sm font-medium text-[#2B1B14]">
+          Product is available for sale
+        </span>
+      </label>
+
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={
+          submitting ||
+          loadingCategories ||
+          categories.length === 0
+        }
+        className="w-full rounded-lg bg-[#754426] px-5 py-3 font-semibold text-white transition hover:bg-[#2B1B14] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+      >
+        {submitting ? "Saving..." : btntext}
+      </button>
+    </form>
+  );
 }

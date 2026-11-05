@@ -1,14 +1,24 @@
+
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
+type CustomizationSnapshot = {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  priceAdjustment: number;
+};
+
 type Item = {
   id: string;
   name: string;
   price: number;
   quantity: number;
+  customizations: CustomizationSnapshot[];
 };
 
 type Address = {
@@ -34,7 +44,6 @@ export default function Checkout({ item }: CheckoutProps) {
   const { data: session } = useSession();
 
   const [load, setLoad] = useState(false);
-
   const [cartItems, setCartItems] = useState<Item[]>([]);
 
   // Address
@@ -71,10 +80,18 @@ export default function Checkout({ item }: CheckoutProps) {
 
         setCartItems(
           items.map((cartItem: any) => ({
-            id: cartItem.product.id,
+            id: cartItem.id,
             name: cartItem.product.name,
-            price: Number(cartItem.product.price),
+            price: Number(cartItem.price),
             quantity: cartItem.quantity,
+            customizations: Array.isArray(cartItem.customizations)
+              ? cartItem.customizations.map((customization: any) => ({
+                  ...customization,
+                  priceAdjustment: Number(
+                    customization.priceAdjustment || 0
+                  ),
+                }))
+              : [],
           }))
         );
       } catch (error) {
@@ -104,7 +121,6 @@ export default function Checkout({ item }: CheckoutProps) {
 
         setAddresses(savedAddresses);
 
-        // Automatically select default address
         const defaultAddress = savedAddresses.find(
           (item) => item.isDefault
         );
@@ -142,18 +158,15 @@ export default function Checkout({ item }: CheckoutProps) {
   // =========================
   // TOTAL CALCULATIONS
   // =========================
-  const total = cartItems.reduce((acc, item) => {
-    return acc + Number(item.price) * item.quantity;
+  const total = cartItems.reduce((acc, currentItem) => {
+    return acc + Number(currentItem.price) * currentItem.quantity;
   }, 0);
 
   const tax = total * 0.1;
 
   const subtotal = total + tax;
 
-  const grandTotal = Math.max(
-    0,
-    subtotal - discountAmount
-  );
+  const grandTotal = Math.max(0, subtotal - discountAmount);
 
   // =========================
   // APPLY COUPON
@@ -170,17 +183,19 @@ export default function Checkout({ item }: CheckoutProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          code: couponCode,
-          totalAmount: subtotal,
-        }),
+    body: JSON.stringify({
+  couponCode: couponCode.trim(),
+  orderType,
+  address: orderType === "DELIVERY" ? address.trim() : "",
+  phone: orderType !== "DINE_IN" ? phone.trim() : "",
+}),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
         setCouponMessage(
-          data.error || "Failed to apply coupon"
+          data.error || data.message || "Failed to apply coupon"
         );
         setDiscountAmount(0);
         return;
@@ -194,10 +209,7 @@ export default function Checkout({ item }: CheckoutProps) {
     } catch (error) {
       console.error("Coupon error:", error);
 
-      setCouponMessage(
-        "An error occurred while applying the coupon"
-      );
-
+      setCouponMessage("An error occurred while applying the coupon");
       setDiscountAmount(0);
     }
   };
@@ -207,10 +219,7 @@ export default function Checkout({ item }: CheckoutProps) {
   // =========================
   const handles = async () => {
     // Delivery validation
-    if (
-      orderType === "DELIVERY" &&
-      !address.trim()
-    ) {
+    if (orderType === "DELIVERY" && !address.trim()) {
       alert("Please select or enter a delivery address");
       return;
     }
@@ -247,50 +256,35 @@ export default function Checkout({ item }: CheckoutProps) {
       // ONLINE PAYMENT
       // =========================
       if (paymentWay === "ONLINE") {
-        const res = await fetch(
-          "/api/payment/create-order",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              amount: subtotal,
-              couponCode,
-              discountAmount,
-              finalAmount: grandTotal,
-            }),
-          }
-        );
+        const res = await fetch("/api/payment/create-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            couponCode,
+          }),
+        });
 
         const data = await res.json();
 
         if (!res.ok) {
           throw new Error(
-            data.message ||
-              `Request failed: ${res.status}`
+            data.message || `Request failed: ${res.status}`
           );
         }
 
         if (!(window as any).Razorpay) {
-          throw new Error(
-            "Razorpay SDK not loaded"
-          );
+          throw new Error("Razorpay SDK not loaded");
         }
 
         const options = {
-          key: process.env
-            .NEXT_PUBLIC_RAZORPAY_KEY_ID as string,
-
+          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID as string,
           amount: data.data.amount,
-
           currency: data.data.currency,
-
           name: "Coffee Shop",
-
           description: "Coffee Shop Order",
-
           order_id: data.data.id,
 
           prefill: {
@@ -302,49 +296,31 @@ export default function Checkout({ item }: CheckoutProps) {
             color: "#6f4e37",
           },
 
-          handler: async function (
-            response: any
-          ) {
+          handler: async function (response: any) {
             try {
-              const verifyRes = await fetch(
-                "/api/payment/verify",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type":
-                      "application/json",
-                  },
-                  credentials: "include",
+              const verifyRes = await fetch("/api/payment/verify", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                credentials: "include",
 
-                  body: JSON.stringify({
-                    razorpay_order_id:
-                      response.razorpay_order_id,
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  couponCode,
 
-                    razorpay_payment_id:
-                      response.razorpay_payment_id,
+                  address:
+                    orderType === "DELIVERY" ? address : "",
 
-                    razorpay_signature:
-                      response.razorpay_signature,
+                  phone: orderType !== "DINE_IN" ? phone : "",
 
-                    couponCode,
+                  orderType,
+                }),
+              });
 
-                    address:
-                      orderType === "DELIVERY"
-                        ? address
-                        : "",
-
-                    phone:
-                      orderType !== "DINE_IN"
-                        ? phone
-                        : "",
-
-                    orderType,
-                  }),
-                }
-              );
-
-              const verifyData =
-                await verifyRes.json();
+              const verifyData = await verifyRes.json();
 
               if (!verifyRes.ok) {
                 throw new Error(
@@ -354,22 +330,16 @@ export default function Checkout({ item }: CheckoutProps) {
               }
 
               alert(
-                verifyData.message ||
-                  "Payment successful"
+                verifyData.message || "Payment successful"
               );
 
               if (verifyData.data?.id) {
-                router.push(
-                  `/orders/${verifyData.data.id}`
-                );
+                router.push(`/orders/${verifyData.data.id}`);
               } else {
                 router.push("/orders");
               }
             } catch (error) {
-              console.error(
-                "Payment verification error:",
-                error
-              );
+              console.error("Payment verification error:", error);
 
               alert(
                 error instanceof Error
@@ -378,78 +348,58 @@ export default function Checkout({ item }: CheckoutProps) {
               );
             }
           },
+
+          modal: {
+            ondismiss: () => {
+              setLoad(false);
+            },
+          },
         };
 
-        const razorpay = new (
-          window as any
-        ).Razorpay(options);
+        const razorpay = new (window as any).Razorpay(options);
 
         razorpay.open();
 
         setLoad(false);
-
         return;
       }
 
       // =========================
       // COD ORDER
       // =========================
-      const res = await fetch(
-        "/api/orders",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          credentials: "include",
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
 
-          body: JSON.stringify({
-            address:
-              orderType === "DELIVERY"
-                ? address
-                : "",
-
-            phone:
-              orderType !== "DINE_IN"
-                ? phone
-                : "",
-
-            paymentWay,
-
-            couponCode,
-
-            orderType,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          address: orderType === "DELIVERY" ? address : "",
+          phone: orderType !== "DINE_IN" ? phone : "",
+          paymentWay,
+          couponCode,
+          orderType,
+        }),
+      });
 
       const data = await res.json();
 
       if (!res.ok) {
         throw new Error(
-          data.message ||
-            `Request failed: ${res.status}`
+          data.message || `Request failed: ${res.status}`
         );
       }
 
-      alert(
-        data.message ||
-          "Order placed successfully"
-      );
+      alert(data.message || "Order placed successfully");
 
       if (data.data?.id) {
-        router.push(
-          `/orders/${data.data.id}`
-        );
+        router.push(`/orders/${data.data.id}`);
       } else {
         router.push("/orders");
       }
     } catch (error) {
-      console.error(
-        "Order error:",
-        error
-      );
+      console.error("Order error:", error);
 
       alert(
         error instanceof Error
@@ -461,6 +411,9 @@ export default function Checkout({ item }: CheckoutProps) {
     }
   };
 
+  // =========================
+  // UI
+  // =========================
   return (
     <main className="min-h-screen bg-[#f8f3ed] px-4 py-10 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-6xl">
@@ -476,27 +429,20 @@ export default function Checkout({ item }: CheckoutProps) {
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
 
-          {/* =========================
-              LEFT SIDE
-          ========================= */}
+          {/* LEFT SIDE */}
           <section className="rounded-3xl bg-white p-6 shadow-sm">
 
-            {/* =========================
-                DELIVERY ADDRESS
-            ========================= */}
+            {/* DELIVERY ADDRESS */}
             {orderType === "DELIVERY" && (
               <div>
                 <div className="flex items-center justify-between">
-
                   <h2 className="text-xl font-semibold text-[#3b2115]">
                     Delivery Address
                   </h2>
 
                   <button
                     type="button"
-                    onClick={() =>
-                      router.push("/addresses")
-                    }
+                    onClick={() => router.push("/addresses")}
                     className="text-sm font-semibold text-[#6f4e37] hover:underline"
                   >
                     + Add New
@@ -506,120 +452,86 @@ export default function Checkout({ item }: CheckoutProps) {
                 {/* SAVED ADDRESSES */}
                 {addresses.length > 0 ? (
                   <div className="mt-4 space-y-3">
-
-                    {addresses.map(
-                      (item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() =>
-                            selectAddress(item)
-                          }
-                          className={`w-full rounded-2xl border p-4 text-left transition ${
-                            selectedAddressId ===
-                            item.id
-                              ? "border-[#6f4e37] bg-[#f3e7dc]"
-                              : "border-[#d8c8ba] bg-[#fffdfa] hover:border-[#a98c78]"
-                          }`}
-                        >
-
-                          <div className="flex items-center justify-between">
-
-                            <div className="font-semibold text-[#3b2115]">
-                              {item.label ||
-                                item.type}
-                            </div>
-
-                            {item.isDefault && (
-                              <span className="rounded-full bg-[#6f4e37] px-3 py-1 text-xs text-white">
-                                Default
-                              </span>
-                            )}
-
+                    {addresses.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectAddress(item)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          selectedAddressId === item.id
+                            ? "border-[#6f4e37] bg-[#f3e7dc]"
+                            : "border-[#d8c8ba] bg-[#fffdfa] hover:border-[#a98c78]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-[#3b2115]">
+                            {item.label || item.type}
                           </div>
 
-                          <p className="mt-2 text-sm font-medium text-[#3b2115]">
-                            {item.fullName}
-                          </p>
+                          {item.isDefault && (
+                            <span className="rounded-full bg-[#6f4e37] px-3 py-1 text-xs text-white">
+                              Default
+                            </span>
+                          )}
+                        </div>
 
-                          <p className="mt-1 text-sm text-[#80695b]">
+                        <p className="mt-2 text-sm font-medium text-[#3b2115]">
+                          {item.fullName}
+                        </p>
 
-                            {item.addressLine}
+                        <p className="mt-1 text-sm text-[#80695b]">
+                          {item.addressLine}
 
-                            {item.landmark &&
-                              `, ${item.landmark}`}
+                          {item.landmark && `, ${item.landmark}`}
 
-                            <br />
+                          <br />
 
-                            {item.city},{" "}
-                            {item.state} -{" "}
-                            {item.pincode}
+                          {item.city}, {item.state} - {item.pincode}
+                        </p>
 
-                          </p>
-
-                          <p className="mt-2 text-sm text-[#80695b]">
-                            📞 {item.phone}
-                          </p>
-
-                        </button>
-                      )
-                    )}
-
+                        <p className="mt-2 text-sm text-[#80695b]">
+                          📞 {item.phone}
+                        </p>
+                      </button>
+                    ))}
                   </div>
                 ) : (
-                  /* NO ADDRESS */
                   <div className="mt-4 rounded-2xl border border-dashed border-[#d8c8ba] bg-[#fffdfa] p-5 text-center">
-
                     <p className="text-sm text-[#80695b]">
                       No saved addresses found.
                     </p>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        router.push(
-                          "/addresses"
-                        )
-                      }
+                      onClick={() => router.push("/addresses")}
                       className="mt-3 rounded-full bg-[#6f4e37] px-5 py-2 text-sm font-semibold text-white"
                     >
                       Add Address
                     </button>
-
                   </div>
                 )}
 
                 {/* SELECTED ADDRESS */}
                 {address && (
                   <div className="mt-4">
-
                     <p className="mb-2 text-sm font-medium text-[#80695b]">
                       Selected delivery address
                     </p>
 
                     <textarea
                       value={address}
-                      onChange={(e) =>
-                        setAddress(
-                          e.target.value
-                        )
-                      }
+                      onChange={(e) => setAddress(e.target.value)}
                       rows={3}
                       className="w-full rounded-xl border border-[#d8c8ba] bg-[#fffdfa] p-3 outline-none focus:border-[#6f4e37]"
                     />
-
                   </div>
                 )}
-
               </div>
             )}
 
-            {/* =========================
-                PHONE
-            ========================= */}
+            {/* PHONE */}
             {orderType !== "DINE_IN" && (
               <div className="mt-6">
-
                 <h2 className="text-xl font-semibold text-[#3b2115]">
                   Phone Number
                 </h2>
@@ -630,25 +542,16 @@ export default function Checkout({ item }: CheckoutProps) {
                   maxLength={10}
                   value={phone}
                   onChange={(e) =>
-                    setPhone(
-                      e.target.value.replace(
-                        /\D/g,
-                        ""
-                      )
-                    )
+                    setPhone(e.target.value.replace(/\D/g, ""))
                   }
                   placeholder="Enter phone number"
                   className="mt-4 w-full rounded-xl border border-[#d8c8ba] bg-[#fffdfa] p-3 outline-none focus:border-[#6f4e37]"
                 />
-
               </div>
             )}
 
-            {/* =========================
-                ORDER TYPE
-            ========================= */}
+            {/* ORDER TYPE */}
             <div className="mt-6">
-
               <h2 className="mb-3 text-lg font-bold text-[#3b2115]">
                 Order Type
               </h2>
@@ -658,21 +561,14 @@ export default function Checkout({ item }: CheckoutProps) {
                 {/* DELIVERY */}
                 <button
                   type="button"
-                  onClick={() =>
-                    setOrderType(
-                      "DELIVERY"
-                    )
-                  }
+                  onClick={() => setOrderType("DELIVERY")}
                   className={`rounded-xl border p-4 ${
                     orderType === "DELIVERY"
                       ? "border-[#6f4e37] bg-[#f3e7dc]"
                       : "border-gray-200 bg-white"
                   }`}
                 >
-                  <div className="text-2xl">
-                    🚚
-                  </div>
-
+                  <div className="text-2xl">🚚</div>
                   <div className="font-semibold text-[#3b2115]">
                     Delivery
                   </div>
@@ -681,21 +577,14 @@ export default function Checkout({ item }: CheckoutProps) {
                 {/* PICKUP */}
                 <button
                   type="button"
-                  onClick={() =>
-                    setOrderType(
-                      "PICKUP"
-                    )
-                  }
+                  onClick={() => setOrderType("PICKUP")}
                   className={`rounded-xl border p-4 ${
                     orderType === "PICKUP"
                       ? "border-[#6f4e37] bg-[#f3e7dc]"
                       : "border-gray-200 bg-white"
                   }`}
                 >
-                  <div className="text-2xl">
-                    🏃
-                  </div>
-
+                  <div className="text-2xl">🏃</div>
                   <div className="font-semibold text-[#3b2115]">
                     Pickup
                   </div>
@@ -704,21 +593,14 @@ export default function Checkout({ item }: CheckoutProps) {
                 {/* DINE IN */}
                 <button
                   type="button"
-                  onClick={() =>
-                    setOrderType(
-                      "DINE_IN"
-                    )
-                  }
+                  onClick={() => setOrderType("DINE_IN")}
                   className={`rounded-xl border p-4 ${
                     orderType === "DINE_IN"
                       ? "border-[#6f4e37] bg-[#f3e7dc]"
                       : "border-gray-200 bg-white"
                   }`}
                 >
-                  <div className="text-2xl">
-                    ☕
-                  </div>
-
+                  <div className="text-2xl">☕</div>
                   <div className="font-semibold text-[#3b2115]">
                     Dine-in
                   </div>
@@ -727,22 +609,15 @@ export default function Checkout({ item }: CheckoutProps) {
               </div>
             </div>
 
-            {/* =========================
-                PAYMENT
-            ========================= */}
+            {/* PAYMENT */}
             <div className="mt-6">
-
               <h2 className="text-xl font-semibold text-[#3b2115]">
                 Payment Method
               </h2>
 
               <select
                 value={paymentWay}
-                onChange={(e) =>
-                  setPaymentWay(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => setPaymentWay(e.target.value)}
                 className="mt-4 w-full rounded-xl border border-[#d8c8ba] bg-[#fffdfa] p-3 outline-none focus:border-[#6f4e37]"
               >
                 <option value="COD">
@@ -753,14 +628,11 @@ export default function Checkout({ item }: CheckoutProps) {
                   Online Payment
                 </option>
               </select>
-
             </div>
 
           </section>
 
-          {/* =========================
-              RIGHT SIDE
-          ========================= */}
+          {/* RIGHT SIDE */}
           <aside className="h-fit rounded-3xl bg-[#e1e6dc] p-6">
 
             <h2 className="text-2xl font-semibold text-[#3b2115]">
@@ -769,52 +641,64 @@ export default function Checkout({ item }: CheckoutProps) {
 
             {/* CART ITEMS */}
             <div className="mt-6 space-y-4">
-
-              {cartItems.map(
-                (product) => (
-                  <div
-                    key={product.id}
-                    className="flex justify-between gap-4"
-                  >
-
-                    <div>
-
-                      <p className="font-medium text-[#3b2115]">
-                        {product.name}
-                      </p>
-
-                      <p className="text-sm text-[#80695b]">
-                        Qty:{" "}
-                        {product.quantity}
-                      </p>
-
-                    </div>
-
-                    <p className="font-semibold text-[#3b2115]">
-                      ₹
-                      {(
-                        product.price *
-                        product.quantity
-                      ).toFixed(2)}
+              {cartItems.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex justify-between gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-[#3b2115]">
+                      {product.name}
                     </p>
 
-                  </div>
-                )
-              )}
+                    <p className="text-sm text-[#80695b]">
+                      Qty: {product.quantity}
+                    </p>
 
+                    {/* CUSTOMIZATIONS */}
+                    {product.customizations.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {product.customizations.map((customization) => (
+                          <p
+                            key={`${customization.groupId}-${customization.optionId}`}
+                            className="text-xs text-[#80695b]"
+                          >
+                            {customization.groupName}:{" "}
+                            {customization.optionName}
+
+                            {Number(customization.priceAdjustment) > 0 &&
+                              ` (+₹${Number(
+                                customization.priceAdjustment
+                              ).toFixed(2)})`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="mt-1 text-xs text-[#80695b]">
+                      ₹{product.price.toFixed(2)} per item
+                    </p>
+                  </div>
+
+                  <p className="shrink-0 font-semibold text-[#3b2115]">
+                    ₹{(
+                      product.price * product.quantity
+                    ).toFixed(2)}
+                  </p>
+                </div>
+              ))}
             </div>
 
             {/* COUPON */}
             <div className="mt-6 flex gap-2">
-
               <input
                 type="text"
                 value={couponCode}
-                onChange={(e) =>
-                  setCouponCode(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => {
+                  setCouponCode(e.target.value);
+                  setDiscountAmount(0);
+                  setCouponMessage("");
+                }}
                 placeholder="Enter coupon"
                 className="min-w-0 flex-1 rounded-xl border border-[#c5cec0] bg-white px-3 py-2 outline-none focus:border-[#6f4e37]"
               />
@@ -826,7 +710,6 @@ export default function Checkout({ item }: CheckoutProps) {
               >
                 Apply
               </button>
-
             </div>
 
             {couponMessage && (
@@ -840,39 +723,22 @@ export default function Checkout({ item }: CheckoutProps) {
 
               <div className="flex justify-between text-sm">
                 <span>Subtotal</span>
-                <span>
-                  ₹{total.toFixed(2)}
-                </span>
+                <span>₹{total.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-sm">
-                <span>Tax</span>
-                <span>
-                  ₹{tax.toFixed(2)}
-                </span>
+                <span>Tax (10%)</span>
+                <span>₹{tax.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-sm">
                 <span>Discount</span>
-                <span>
-                  ₹
-                  {discountAmount.toFixed(
-                    2
-                  )}
-                </span>
+                <span>₹{discountAmount.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between border-t border-[#c5cec0] pt-4 text-lg font-bold text-[#3b2115]">
-                <span>
-                  Final Total
-                </span>
-
-                <span>
-                  ₹
-                  {grandTotal.toFixed(
-                    2
-                  )}
-                </span>
+                <span>Final Total</span>
+                <span>₹{grandTotal.toFixed(2)}</span>
               </div>
 
             </div>
@@ -881,19 +747,13 @@ export default function Checkout({ item }: CheckoutProps) {
             <button
               type="button"
               onClick={handles}
-              disabled={
-                load ||
-                cartItems.length === 0
-              }
+              disabled={load || cartItems.length === 0}
               className="mt-7 w-full rounded-full bg-[#6f4e37] py-4 font-semibold text-white transition hover:bg-[#5a3e2b] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {load
-                ? "Processing..."
-                : "Place Order"}
+              {load ? "Processing..." : "Place Order"}
             </button>
 
           </aside>
-
         </div>
       </div>
     </main>
