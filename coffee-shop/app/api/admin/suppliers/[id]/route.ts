@@ -2,51 +2,85 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { getcurrentuser } from "@/app/lib/auth";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// ==========================================
-// ADMIN AUTHORIZATION
-// ==========================================
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+const FIELD_LIMITS = {
+  name: 150,
+  contactPerson: 150,
+  email: 254,
+  phone: 30,
+  address: 500,
+  city: 100,
+  state: 100,
+  pincode: 20,
+  notes: 1000,
+} as const;
+
+type SupplierField = keyof typeof FIELD_LIMITS;
+
+function errorResponse(message: string, status = 400) {
+  return NextResponse.json(
+    { success: false, message },
+    { status }
+  );
+}
 
 async function authorizeAdmin() {
   const user = await getcurrentuser();
 
-  if (!user) {
+  if (!user?.id) {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Please login first." },
-        { status: 401 }
-      ),
+      response: errorResponse("Please login first.", 401),
     };
   }
 
   if (user.role !== "ADMIN") {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Admin access required." },
-        { status: 403 }
-      ),
+      response: errorResponse("Admin access required.", 403),
     };
   }
 
   return { authorized: true as const };
 }
 
-// ==========================================
-// ROUTE PARAMS
-// ==========================================
+async function parseBody(
+  request: NextRequest
+): Promise<Record<string, unknown> | null> {
+  try {
+    const body: unknown = await request.json();
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return null;
+    }
 
-// ==========================================
-// GET: SINGLE SUPPLIER DETAILS
-// ==========================================
+    return body as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
+function isPrismaError(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
+// GET: Single Supplier Details
 export async function GET(
   _request: NextRequest,
   { params }: RouteContext
@@ -54,11 +88,13 @@ export async function GET(
   try {
     const auth = await authorizeAdmin();
 
-    if (!auth.authorized) {
-      return auth.response;
-    }
+    if (!auth.authorized) return auth.response;
 
     const { id } = await params;
+
+    if (!id?.trim()) {
+      return errorResponse("Invalid supplier ID.");
+    }
 
     const supplier = await prisma.supplier.findUnique({
       where: { id },
@@ -76,19 +112,17 @@ export async function GET(
             totalAmount: true,
             createdAt: true,
           },
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: [
+            { createdAt: "desc" },
+            { id: "desc" },
+          ],
           take: 10,
         },
       },
     });
 
     if (!supplier) {
-      return NextResponse.json(
-        { success: false, message: "Supplier not found." },
-        { status: 404 }
-      );
+      return errorResponse("Supplier not found.", 404);
     }
 
     return NextResponse.json({
@@ -97,18 +131,11 @@ export async function GET(
     });
   } catch (error) {
     console.error("Supplier GET error:", error);
-
-    return NextResponse.json(
-      { success: false, message: "Failed to fetch supplier." },
-      { status: 500 }
-    );
+    return errorResponse("Failed to fetch supplier.", 500);
   }
 }
 
-// ==========================================
-// PUT: UPDATE SUPPLIER DETAILS
-// ==========================================
-
+// PUT: Update Supplier Details
 export async function PUT(
   request: NextRequest,
   { params }: RouteContext
@@ -116,90 +143,66 @@ export async function PUT(
   try {
     const auth = await authorizeAdmin();
 
-    if (!auth.authorized) {
-      return auth.response;
-    }
+    if (!auth.authorized) return auth.response;
 
     const { id } = await params;
-    const body = await request.json();
 
-    const existingSupplier = await prisma.supplier.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!existingSupplier) {
-      return NextResponse.json(
-        { success: false, message: "Supplier not found." },
-        { status: 404 }
-      );
+    if (!id?.trim()) {
+      return errorResponse("Invalid supplier ID.");
     }
 
-    const allowedFields = [
-      "name",
-      "contactPerson",
-      "email",
-      "phone",
-      "address",
-      "city",
-      "state",
-      "pincode",
-      "notes",
-    ] as const;
+    const body = await parseBody(request);
 
-    const updateData: Record<string, string | null> = {};
+    if (!body) {
+      return errorResponse("Invalid JSON request body.");
+    }
+
+    const allowedFields = Object.keys(
+      FIELD_LIMITS
+    ) as SupplierField[];
+
+    const updateData: Partial<
+      Record<SupplierField, string | null>
+    > = {};
 
     for (const field of allowedFields) {
-      if (!(field in body)) continue;
+      if (!Object.prototype.hasOwnProperty.call(body, field)) {
+        continue;
+      }
 
       const value = body[field];
 
       if (value !== null && typeof value !== "string") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: `Invalid ${field} value.`,
-          },
-          { status: 400 }
+        return errorResponse(`Invalid ${field} value.`);
+      }
+
+      if (
+        typeof value === "string" &&
+        value.length > FIELD_LIMITS[field]
+      ) {
+        return errorResponse(
+          `${field} cannot exceed ${FIELD_LIMITS[field]} characters.`
         );
       }
 
-      if (typeof value === "string" && value.length > 500) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: `${field} cannot exceed 500 characters.`,
-          },
-          { status: 400 }
-        );
-      }
+      const trimmedValue =
+        typeof value === "string" ? value.trim() : "";
 
-      updateData[field] =
-        typeof value === "string" && value.trim()
-          ? value.trim()
-          : null;
+      // Supplier name is required by the Prisma schema.
+      if (field === "name") {
+        if (!trimmedValue) {
+          return errorResponse("A valid supplier name is required.");
+        }
+
+        updateData.name = trimmedValue;
+      } else {
+        updateData[field] = trimmedValue || null;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Provide at least one field to update.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      "name" in updateData &&
-      (!updateData.name || updateData.name.length > 150)
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "A valid supplier name is required.",
-        },
-        { status: 400 }
+      return errorResponse(
+        "Provide at least one valid field to update."
       );
     }
 
@@ -209,14 +212,23 @@ export async function PUT(
       if (
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updateData.email)
       ) {
-        return NextResponse.json(
-          { success: false, message: "Invalid email address." },
-          { status: 400 }
-        );
+        return errorResponse("Invalid email address.");
       }
     }
 
-    // Check duplicate name
+    if (updateData.phone && updateData.phone.length < 7) {
+      return errorResponse(
+        "Phone number must contain at least 7 characters."
+      );
+    }
+
+    if (
+      updateData.pincode &&
+      !/^[a-zA-Z0-9 -]+$/.test(updateData.pincode)
+    ) {
+      return errorResponse("Invalid pincode.");
+    }
+
     if (updateData.name) {
       const duplicate = await prisma.supplier.findFirst({
         where: {
@@ -230,19 +242,16 @@ export async function PUT(
       });
 
       if (duplicate) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Another supplier already uses this name.",
-          },
-          { status: 409 }
+        return errorResponse(
+          "Another supplier already uses this name.",
+          409
         );
       }
     }
 
     const supplier = await prisma.supplier.update({
       where: { id },
-      data: updateData,
+      data: updateData as Prisma.SupplierUpdateInput,
     });
 
     return NextResponse.json({
@@ -253,17 +262,22 @@ export async function PUT(
   } catch (error) {
     console.error("Supplier PUT error:", error);
 
-    return NextResponse.json(
-      { success: false, message: "Failed to update supplier." },
-      { status: 500 }
-    );
+    if (isPrismaError(error, "P2025")) {
+      return errorResponse("Supplier not found.", 404);
+    }
+
+    if (isPrismaError(error, "P2002")) {
+      return errorResponse(
+        "A supplier with these unique details already exists.",
+        409
+      );
+    }
+
+    return errorResponse("Failed to update supplier.", 500);
   }
 }
 
-// ==========================================
-// PATCH: ACTIVATE / DEACTIVATE SUPPLIER
-// ==========================================
-
+// PATCH: Activate / Deactivate Supplier
 export async function PATCH(
   request: NextRequest,
   { params }: RouteContext
@@ -271,40 +285,37 @@ export async function PATCH(
   try {
     const auth = await authorizeAdmin();
 
-    if (!auth.authorized) {
-      return auth.response;
-    }
+    if (!auth.authorized) return auth.response;
 
     const { id } = await params;
-    const body = await request.json();
+
+    if (!id?.trim()) {
+      return errorResponse("Invalid supplier ID.");
+    }
+
+    const body = await parseBody(request);
+
+    if (!body) {
+      return errorResponse("Invalid JSON request body.");
+    }
 
     if (typeof body.isActive !== "boolean") {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "isActive must be true or false.",
-        },
-        { status: 400 }
-      );
+      return errorResponse("isActive must be true or false.");
     }
 
-    const existingSupplier = await prisma.supplier.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!existingSupplier) {
-      return NextResponse.json(
-        { success: false, message: "Supplier not found." },
-        { status: 404 }
-      );
-    }
-
-    const supplier = await prisma.supplier.update({
+    const result = await prisma.supplier.updateMany({
       where: { id },
       data: {
         isActive: body.isActive,
       },
+    });
+
+    if (result.count === 0) {
+      return errorResponse("Supplier not found.", 404);
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { id },
     });
 
     return NextResponse.json({
@@ -317,17 +328,14 @@ export async function PATCH(
   } catch (error) {
     console.error("Supplier PATCH error:", error);
 
-    return NextResponse.json(
-      { success: false, message: "Failed to update supplier status." },
-      { status: 500 }
+    return errorResponse(
+      "Failed to update supplier status.",
+      500
     );
   }
 }
 
-// ==========================================
-// DELETE: SAFE SUPPLIER DELETION
-// ==========================================
-
+// DELETE: Safe Supplier Deletion
 export async function DELETE(
   _request: NextRequest,
   { params }: RouteContext
@@ -335,47 +343,47 @@ export async function DELETE(
   try {
     const auth = await authorizeAdmin();
 
-    if (!auth.authorized) {
-      return auth.response;
-    }
+    if (!auth.authorized) return auth.response;
 
     const { id } = await params;
 
-    // Check supplier and linked purchase orders
-    const supplier = await prisma.supplier.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            purchaseOrders: true,
+    if (!id?.trim()) {
+      return errorResponse("Invalid supplier ID.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          _count: {
+            select: {
+              purchaseOrders: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    if (!supplier) {
-      return NextResponse.json(
-        { success: false, message: "Supplier not found." },
-        { status: 404 }
-      );
-    }
+      if (!supplier) {
+        throw new Error("SUPPLIER_NOT_FOUND");
+      }
 
-    if (supplier._count.purchaseOrders > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "This supplier has purchase order records and cannot be deleted. Deactivate the supplier instead.",
-          linkedPurchaseOrders: supplier._count.purchaseOrders,
-          suggestion: "Use PATCH with { isActive: false }.",
+      if (supplier._count.purchaseOrders > 0) {
+        throw new Error("SUPPLIER_HAS_PURCHASE_ORDERS");
+      }
+
+      const result = await tx.supplier.deleteMany({
+        where: {
+          id,
+          purchaseOrders: {
+            none: {},
+          },
         },
-        { status: 409 }
-      );
-    }
+      });
 
-    // Delete only if no purchase orders are linked
-    await prisma.supplier.delete({
-      where: { id },
+      if (result.count !== 1) {
+        throw new Error("SUPPLIER_HAS_PURCHASE_ORDERS");
+      }
     });
 
     return NextResponse.json({
@@ -385,12 +393,32 @@ export async function DELETE(
   } catch (error) {
     console.error("Supplier DELETE error:", error);
 
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to delete supplier.",
-      },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "";
+
+    if (message === "SUPPLIER_NOT_FOUND") {
+      return errorResponse("Supplier not found.", 404);
+    }
+
+    if (message === "SUPPLIER_HAS_PURCHASE_ORDERS") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "This supplier has purchase order records and cannot be deleted. Deactivate the supplier instead.",
+          suggestion: "Use PATCH with { isActive: false }.",
+        },
+        { status: 409 }
+      );
+    }
+
+    if (isPrismaError(error, "P2003")) {
+      return errorResponse(
+        "Supplier has linked records and cannot be deleted.",
+        409
+      );
+    }
+
+    return errorResponse("Failed to delete supplier.", 500);
   }
 }

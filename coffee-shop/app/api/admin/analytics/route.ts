@@ -1,4 +1,6 @@
+
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { getcurrentuser } from "@/app/lib/auth";
 
@@ -53,6 +55,17 @@ export async function GET(req: NextRequest) {
       },
     };
 
+    // Explicit Prisma type prevents enum values becoming plain strings.
+    const paidOrderFilter: Prisma.OrderWhereInput = {
+      ...dateFilter,
+      paymentStatus: {
+        in: ["PAID", "COMPLETED"],
+      },
+      status: {
+        not: "CANCELLED",
+      },
+    };
+
     // 3. Fetch analytics in parallel
     const [
       revenue,
@@ -61,20 +74,21 @@ export async function GET(req: NextRequest) {
       completedOrders,
       cancelledOrders,
       newCustomers,
+      totalCustomers,
       totalProducts,
       lowStockProducts,
       recentOrders,
-      productSales,
+      orderItems,
     ] = await Promise.all([
+      // Paid revenue
       prisma.order.aggregate({
-        where: {
-          ...dateFilter,
-          paymentStatus: { in: ["PAID", "COMPLETED"] },
-          status: { not: "CANCELLED" },
+        where: paidOrderFilter,
+        _sum: {
+          totalPrice: true,
         },
-        _sum: { totalPrice: true },
       }),
 
+      // All orders in selected period
       prisma.order.count({
         where: dateFilter,
       }),
@@ -82,7 +96,9 @@ export async function GET(req: NextRequest) {
       prisma.order.count({
         where: {
           ...dateFilter,
-          status: { in: ["PENDING", "CONFIRMED", "PREPARING"] },
+          status: {
+            in: ["PENDING", "CONFIRMED", "PREPARING"],
+          },
         },
       }),
 
@@ -100,6 +116,7 @@ export async function GET(req: NextRequest) {
         },
       }),
 
+      // Customers registered in selected period
       prisma.user.count({
         where: {
           createdAt: dateFilter.createdAt,
@@ -107,17 +124,30 @@ export async function GET(req: NextRequest) {
         },
       }),
 
-      prisma.product.count(),
-
-      prisma.product.count({
+      // All registered customers
+      prisma.user.count({
         where: {
-          stock: { lte: 5 },
+          role: "USER",
         },
       }),
 
+      prisma.product.count(),
+
+      // Products with stock of 5 or less
+      prisma.product.count({
+        where: {
+          stock: {
+            lte: 5,
+          },
+        },
+      }),
+
+      // Recent orders
       prisma.order.findMany({
         where: dateFilter,
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
         take: 8,
         select: {
           id: true,
@@ -134,65 +164,96 @@ export async function GET(req: NextRequest) {
         },
       }),
 
-      prisma.orderItem.groupBy({
-        by: ["productId"],
+      // Historical order item prices for paid orders
+      prisma.orderItem.findMany({
         where: {
-          order: {
-            ...dateFilter,
-            status: { not: "CANCELLED" },
-          },
+          order: paidOrderFilter,
         },
-        _sum: {
+        select: {
+          productId: true,
           quantity: true,
+          price: true,
         },
-        orderBy: {
-          _sum: {
-            quantity: "desc",
-          },
-        },
-        take: 5,
       }),
     ]);
 
-    // 4. Resolve top-selling product names
-    const topProducts = await prisma.product.findMany({
-      where: {
-        id: {
-          in: productSales.map((item) => item.productId),
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        image: true,
-        price: true,
-      },
-    });
+    // 4. Fetch product details separately
+    const productIds = [
+      ...new Set(orderItems.map((item) => item.productId)),
+    ];
 
-    const topSellingProducts = productSales.map((sale) => {
-      const product = topProducts.find(
-        (item) => item.id === sale.productId
-      );
+    const products = productIds.length
+      ? await prisma.product.findMany({
+          where: {
+            id: {
+              in: productIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        })
+      : [];
 
-      return {
-        id: sale.productId,
-        name: product?.name ?? "Deleted product",
-        image: product?.image ?? "",
-        quantitySold: sale._sum.quantity ?? 0,
-        price: product?.price ?? 0,
-      };
-    });
+    // 5. Calculate top-selling products
+    const productSalesMap = new Map<
+      string,
+      {
+        id: string;
+        quantitySold: number;
+        revenue: number;
+      }
+    >();
 
+    for (const item of orderItems) {
+      const existing = productSalesMap.get(item.productId);
+
+      const quantity = item.quantity;
+      const itemRevenue = quantity * Number(item.price);
+
+      if (existing) {
+        existing.quantitySold += quantity;
+        existing.revenue += itemRevenue;
+      } else {
+        productSalesMap.set(item.productId, {
+          id: item.productId,
+          quantitySold: quantity,
+          revenue: itemRevenue,
+        });
+      }
+    }
+
+    const topSellingProducts = Array.from(productSalesMap.values())
+      .sort((a, b) => b.quantitySold - a.quantitySold)
+      .slice(0, 5)
+      .map((sale) => {
+        const product = products.find(
+          (item) => item.id === sale.id
+        );
+
+        return {
+          id: sale.id,
+          name: product?.name ?? "Deleted product",
+          image: product?.image ?? "",
+          quantitySold: sale.quantitySold,
+          revenue: sale.revenue,
+        };
+      });
+
+    // 6. Return analytics response
     return NextResponse.json({
       success: true,
       data: {
         summary: {
-          revenue: revenue._sum.totalPrice ?? 0,
+          revenue: Number(revenue._sum?.totalPrice ?? 0),
           totalOrders,
           pendingOrders,
           completedOrders,
           cancelledOrders,
           newCustomers,
+          totalCustomers,
           totalProducts,
           lowStockProducts,
         },

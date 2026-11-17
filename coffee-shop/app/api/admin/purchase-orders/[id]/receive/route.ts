@@ -41,34 +41,64 @@ export async function POST(
     }
 
     const { id } = await params;
-    const body = await request.json();
 
-    const items: ReceiveItem[] = body.items;
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return errorResponse("At least one receiving item is required");
+    if (!id?.trim()) {
+      return errorResponse("Invalid purchase order ID");
     }
 
-    if (items.length > 100) {
+    let body: { items?: unknown };
+
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse("Invalid request body");
+    }
+
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      return errorResponse(
+        "At least one receiving item is required"
+      );
+    }
+
+    if (body.items.length > 100) {
       return errorResponse("Maximum 100 items allowed");
     }
 
-    for (const item of items) {
+    const items: ReceiveItem[] = [];
+
+    for (const item of body.items) {
+      if (!item || typeof item !== "object") {
+        return errorResponse("Invalid receiving item");
+      }
+
+      const receivedItem = item as Record<string, unknown>;
+
       if (
-        !item.purchaseOrderItemId ||
-        !Number.isInteger(item.receivedQuantity) ||
-        item.receivedQuantity <= 0
+        typeof receivedItem.purchaseOrderItemId !== "string" ||
+        !receivedItem.purchaseOrderItemId.trim() ||
+        typeof receivedItem.receivedQuantity !== "number" ||
+        !Number.isSafeInteger(receivedItem.receivedQuantity) ||
+        receivedItem.receivedQuantity <= 0
       ) {
         return errorResponse(
           "Each item requires a valid ID and positive integer quantity"
         );
       }
+
+      items.push({
+        purchaseOrderItemId: receivedItem.purchaseOrderItemId,
+        receivedQuantity: receivedItem.receivedQuantity,
+      });
     }
 
-    const itemIds = items.map((item) => item.purchaseOrderItemId);
+    const itemIds = items.map(
+      (item) => item.purchaseOrderItemId
+    );
 
     if (new Set(itemIds).size !== itemIds.length) {
-      return errorResponse("Duplicate purchase order items are not allowed");
+      return errorResponse(
+        "Duplicate purchase order items are not allowed"
+      );
     }
 
     const result = await prisma.$transaction(
@@ -102,11 +132,20 @@ export async function POST(
           throw new Error("INVALID_PURCHASE_ORDER_STATUS");
         }
 
-        const receivingSummary = [];
+        const receivingSummary: {
+          purchaseOrderItemId: string;
+          productId: string;
+          productName: string;
+          receivedQuantity: number;
+          remainingQuantity: number;
+          previousStock: number;
+          newStock: number;
+        }[] = [];
 
         for (const receivedItem of items) {
           const orderItem = purchaseOrder.items.find(
-            (item) => item.id === receivedItem.purchaseOrderItemId
+            (item) =>
+              item.id === receivedItem.purchaseOrderItemId
           );
 
           if (!orderItem) {
@@ -114,7 +153,14 @@ export async function POST(
           }
 
           const remainingQuantity =
-            orderItem.orderedQuantity - orderItem.receivedQuantity;
+            orderItem.orderedQuantity -
+            orderItem.receivedQuantity;
+
+          if (remainingQuantity <= 0) {
+            throw new Error(
+              `ITEM_ALREADY_RECEIVED:${orderItem.product.name}`
+            );
+          }
 
           if (receivedItem.receivedQuantity > remainingQuantity) {
             throw new Error(
@@ -130,6 +176,7 @@ export async function POST(
           const itemUpdate = await tx.purchaseOrderItem.updateMany({
             where: {
               id: orderItem.id,
+              purchaseOrderId: purchaseOrder.id,
               receivedQuantity: previousReceived,
             },
             data: {
@@ -141,11 +188,20 @@ export async function POST(
             throw new Error("CONCURRENT_RECEIVING");
           }
 
-          // Update product stock safely.
+          // Safely calculate updated product stock.
           const previousStock = orderItem.product.stock;
           const newStock =
             previousStock + receivedItem.receivedQuantity;
 
+          if (
+            !Number.isSafeInteger(previousStock) ||
+            !Number.isSafeInteger(newStock) ||
+            newStock < 0
+          ) {
+            throw new Error("INVALID_PRODUCT_STOCK");
+          }
+
+          // Update stock with compare-and-update protection.
           const productUpdate = await tx.product.updateMany({
             where: {
               id: orderItem.productId,
@@ -162,20 +218,17 @@ export async function POST(
             throw new Error("PRODUCT_STOCK_CHANGED");
           }
 
-          // Save directly linked stock movement.
+          // Record inventory movement.
           await tx.stockMovement.create({
             data: {
               productId: orderItem.productId,
               userId: auth.id,
-
               purchaseOrderId: purchaseOrder.id,
               purchaseOrderItemId: orderItem.id,
-
               type: "ADD",
               quantity: receivedItem.receivedQuantity,
               previousStock,
               newStock,
-
               reason: `Purchase Order ${purchaseOrder.orderNumber} receiving`,
             },
           });
@@ -192,16 +245,19 @@ export async function POST(
           });
         }
 
-        // Calculate final PO status.
+        // Calculate the final purchase order status.
         const updatedItems = await tx.purchaseOrderItem.findMany({
           where: {
-            purchaseOrderId: id,
+            purchaseOrderId: purchaseOrder.id,
           },
         });
 
-        const allReceived = updatedItems.every(
-          (item) => item.receivedQuantity >= item.orderedQuantity
-        );
+        const allReceived =
+          updatedItems.length > 0 &&
+          updatedItems.every(
+            (item) =>
+              item.receivedQuantity >= item.orderedQuantity
+          );
 
         const anyReceived = updatedItems.some(
           (item) => item.receivedQuantity > 0
@@ -213,8 +269,9 @@ export async function POST(
             ? "PARTIALLY_RECEIVED"
             : "ORDERED";
 
+        // Update purchase order status.
         const updatedOrder = await tx.purchaseOrder.update({
-          where: { id },
+          where: { id: purchaseOrder.id },
           data: {
             status: newStatus,
             ...(allReceived
@@ -249,7 +306,8 @@ export async function POST(
   } catch (error) {
     console.error("Purchase order receiving error:", error);
 
-    const message = error instanceof Error ? error.message : "";
+    const message =
+      error instanceof Error ? error.message : "";
 
     if (message === "PURCHASE_ORDER_NOT_FOUND") {
       return errorResponse("Purchase order not found", 404);
@@ -263,7 +321,10 @@ export async function POST(
     }
 
     if (message === "PURCHASE_ORDER_ITEM_NOT_FOUND") {
-      return errorResponse("Purchase order item not found", 404);
+      return errorResponse(
+        "Purchase order item not found",
+        404
+      );
     }
 
     if (message.startsWith("RECEIVING_EXCEEDS_ORDERED:")) {
@@ -271,6 +332,13 @@ export async function POST(
 
       return errorResponse(
         `Received quantity exceeds remaining quantity for ${productName}`,
+        409
+      );
+    }
+
+    if (message.startsWith("ITEM_ALREADY_RECEIVED:")) {
+      return errorResponse(
+        "This purchase order item has already been fully received",
         409
       );
     }
@@ -289,6 +357,13 @@ export async function POST(
       );
     }
 
+    if (message === "INVALID_PRODUCT_STOCK") {
+      return errorResponse(
+        "Invalid product stock value",
+        409
+      );
+    }
+
     if (
       typeof error === "object" &&
       error !== null &&
@@ -301,6 +376,9 @@ export async function POST(
       );
     }
 
-    return errorResponse("Failed to receive purchase order stock", 500);
+    return errorResponse(
+      "Failed to receive purchase order stock",
+      500
+    );
   }
 }

@@ -1,7 +1,12 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 
 type Supplier = {
   id: string;
@@ -34,6 +39,12 @@ type SupplierForm = {
   notes: string;
 };
 
+type Summary = {
+  totalSuppliers: number;
+  activeSuppliers: number;
+  inactiveSuppliers: number;
+};
+
 const emptyForm: SupplierForm = {
   name: "",
   contactPerson: "",
@@ -46,6 +57,20 @@ const emptyForm: SupplierForm = {
   notes: "",
 };
 
+const initialSummary: Summary = {
+  totalSuppliers: 0,
+  activeSuppliers: 0,
+  inactiveSuppliers: 0,
+};
+
+async function readResponse(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("Invalid server response.");
+  }
+}
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
@@ -53,6 +78,8 @@ export default function SuppliersPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -61,69 +88,81 @@ export default function SuppliersPage() {
     useState<Supplier | null>(null);
 
   const [form, setForm] = useState<SupplierForm>(emptyForm);
+  const [summary, setSummary] = useState<Summary>(initialSummary);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const [summary, setSummary] = useState({
-    totalSuppliers: 0,
-    activeSuppliers: 0,
-    inactiveSuppliers: 0,
-  });
-
-  // ======================================
   // FETCH SUPPLIERS
-  // ======================================
+  const fetchSuppliers = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        setLoading(true);
+        setError("");
 
-  const fetchSuppliers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
+        const params = new URLSearchParams({ status });
 
-      const params = new URLSearchParams({
-        status,
-      });
-
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
-      const response = await fetch(
-        `/api/admin/suppliers?${params.toString()}`,
-        {
-          credentials: "include",
-          cache: "no-store",
+        if (search.trim()) {
+          params.set("search", search.trim());
         }
-      );
 
-      const result = await response.json();
+        const response = await fetch(
+          `/api/admin/suppliers?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal,
+          }
+        );
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to load suppliers.");
+        const result = await readResponse(response);
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message || "Failed to load suppliers."
+          );
+        }
+
+        setSuppliers(
+          Array.isArray(result.suppliers) ? result.suppliers : []
+        );
+
+        setSummary({
+          totalSuppliers: Number(result.summary?.totalSuppliers ?? 0),
+          activeSuppliers: Number(result.summary?.activeSuppliers ?? 0),
+          inactiveSuppliers: Number(result.summary?.inactiveSuppliers ?? 0),
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to fetch suppliers."
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
-
-      setSuppliers(result.suppliers ?? []);
-      setSummary(result.summary);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to fetch suppliers."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [search, status]);
+    },
+    [search, status]
+  );
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchSuppliers();
+    const controller = new AbortController();
+
+    const timer = window.setTimeout(() => {
+      fetchSuppliers(controller.signal);
     }, 300);
 
-    return () => clearTimeout(timer);
-  }, [fetchSuppliers]);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [fetchSuppliers, refreshKey]);
 
-  // ======================================
   // FORM HANDLING
-  // ======================================
-
   const handleInputChange = (
     field: keyof SupplierForm,
     value: string
@@ -166,17 +205,32 @@ export default function SuppliersPage() {
     setModalOpen(false);
     setEditingSupplier(null);
     setForm(emptyForm);
+    setError("");
   };
 
-  // ======================================
   // CREATE / UPDATE SUPPLIER
-  // ======================================
-
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!form.name.trim()) {
+    const name = form.name.trim();
+
+    if (!name) {
       setError("Supplier name is required.");
+      return;
+    }
+
+    if (name.length > 150) {
+      setError("Supplier name cannot exceed 150 characters.");
+      return;
+    }
+
+    const email = form.email.trim();
+
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -191,19 +245,33 @@ export default function SuppliersPage() {
         ? `/api/admin/suppliers/${editingSupplier!.id}`
         : "/api/admin/suppliers";
 
+      const payload = {
+        name,
+        contactPerson: form.contactPerson.trim(),
+        email,
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        city: form.city.trim(),
+        state: form.state.trim(),
+        pincode: form.pincode.trim(),
+        notes: form.notes.trim(),
+      };
+
       const response = await fetch(endpoint, {
         method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
-      const result = await response.json();
+      const result = await readResponse(response);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to save supplier.");
+        throw new Error(
+          result.message || "Unable to save supplier."
+        );
       }
 
       setModalOpen(false);
@@ -216,7 +284,7 @@ export default function SuppliersPage() {
           : "Supplier created successfully."
       );
 
-      await fetchSuppliers();
+      setRefreshKey((previous) => previous + 1);
     } catch (err) {
       setError(
         err instanceof Error
@@ -228,10 +296,7 @@ export default function SuppliersPage() {
     }
   };
 
-  // ======================================
   // ACTIVATE / DEACTIVATE
-  // ======================================
-
   const toggleStatus = async (supplier: Supplier) => {
     const action = supplier.isActive ? "deactivate" : "activate";
 
@@ -244,6 +309,7 @@ export default function SuppliersPage() {
     }
 
     try {
+      setActionId(supplier.id);
       setError("");
       setSuccess("");
 
@@ -261,27 +327,32 @@ export default function SuppliersPage() {
         }
       );
 
-      const result = await response.json();
+      const result = await readResponse(response);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Status update failed.");
+        throw new Error(
+          result.message || "Status update failed."
+        );
       }
 
-      setSuccess(result.message);
-      await fetchSuppliers();
+      setSuccess(
+        result.message ||
+          `Supplier ${action}d successfully.`
+      );
+
+      setRefreshKey((previous) => previous + 1);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "Unable to update supplier."
       );
+    } finally {
+      setActionId(null);
     }
   };
 
-  // ======================================
   // DELETE SUPPLIER
-  // ======================================
-
   const deleteSupplier = async (supplier: Supplier) => {
     if (supplier._count.purchaseOrders > 0) {
       setError(
@@ -299,6 +370,7 @@ export default function SuppliersPage() {
     }
 
     try {
+      setActionId(supplier.id);
       setError("");
       setSuccess("");
 
@@ -310,20 +382,24 @@ export default function SuppliersPage() {
         }
       );
 
-      const result = await response.json();
+      const result = await readResponse(response);
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Delete failed.");
+        throw new Error(
+          result.message || "Delete failed."
+        );
       }
 
       setSuccess("Supplier deleted successfully.");
-      await fetchSuppliers();
+      setRefreshKey((previous) => previous + 1);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "Unable to delete supplier."
       );
+    } finally {
+      setActionId(null);
     }
   };
 
@@ -348,6 +424,7 @@ export default function SuppliersPage() {
           </div>
 
           <button
+            type="button"
             onClick={openCreateModal}
             className="rounded-xl bg-[#754426] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#2B1B14]"
           >
@@ -357,11 +434,16 @@ export default function SuppliersPage() {
 
         {/* FEEDBACK */}
         {error && !modalOpen && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             <span>{error}</span>
             <button
+              type="button"
               onClick={() => setError("")}
               className="font-bold"
+              aria-label="Dismiss error"
             >
               ✕
             </button>
@@ -369,11 +451,16 @@ export default function SuppliersPage() {
         )}
 
         {success && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+          >
             <span>{success}</span>
             <button
+              type="button"
               onClick={() => setSuccess("")}
               className="font-bold"
+              aria-label="Dismiss success message"
             >
               ✕
             </button>
@@ -412,12 +499,14 @@ export default function SuppliersPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, contact, email or phone..."
+              aria-label="Search suppliers"
               className="rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none focus:border-[#A76535] focus:ring-2 focus:ring-[#A76535]/10"
             />
 
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value)}
+              aria-label="Filter suppliers by status"
               className="rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             >
               <option value="ALL">All Suppliers</option>
@@ -438,7 +527,8 @@ export default function SuppliersPage() {
             </div>
 
             <button
-              onClick={fetchSuppliers}
+              type="button"
+              onClick={() => setRefreshKey((previous) => previous + 1)}
               disabled={loading}
               className="rounded-lg border border-[#EADED4] px-4 py-2 text-sm font-semibold hover:bg-[#F8F3ED] disabled:opacity-50"
             >
@@ -461,15 +551,20 @@ export default function SuppliersPage() {
               </h3>
 
               <p className="mt-2 text-sm text-[#80695B]">
-                Add your first supplier to start managing procurement.
+                {search || status !== "ALL"
+                  ? "Try changing your search or filters."
+                  : "Add your first supplier to start managing procurement."}
               </p>
 
-              <button
-                onClick={openCreateModal}
-                className="mt-4 rounded-lg bg-[#754426] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2B1B14]"
-              >
-                + Add Supplier
-              </button>
+              {!search && status === "ALL" && (
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="mt-4 rounded-lg bg-[#754426] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2B1B14]"
+                >
+                  + Add Supplier
+                </button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -487,100 +582,130 @@ export default function SuppliersPage() {
                 </thead>
 
                 <tbody className="divide-y divide-[#F0E8E0]">
-                  {suppliers.map((supplier) => (
-                    <tr
-                      key={supplier.id}
-                      className="transition hover:bg-[#FDF9F5]"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F8F3ED] font-bold text-[#754426]">
-                            {supplier.name.charAt(0).toUpperCase()}
+                  {suppliers.map((supplier) => {
+                    const busy = actionId === supplier.id;
+
+                    return (
+                      <tr
+                        key={supplier.id}
+                        className="transition hover:bg-[#FDF9F5]"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F8F3ED] font-bold text-[#754426]">
+                              {supplier.name.charAt(0).toUpperCase()}
+                            </div>
+
+                            <div>
+                              <p className="font-semibold">
+                                {supplier.name}
+                              </p>
+                              <p className="mt-1 text-xs text-[#80695B]">
+                                Added{" "}
+                                {supplier.createdAt &&
+                                !Number.isNaN(
+                                  new Date(supplier.createdAt).getTime()
+                                )
+                                  ? new Date(
+                                      supplier.createdAt
+                                    ).toLocaleDateString("en-IN")
+                                  : "—"}
+                              </p>
+                            </div>
                           </div>
+                        </td>
 
-                          <div>
-                            <p className="font-semibold">
-                              {supplier.name}
-                            </p>
-                            <p className="mt-1 text-xs text-[#80695B]">
-                              Added{" "}
-                              {new Date(supplier.createdAt).toLocaleDateString("en-IN")}
-                            </p>
+                        <td className="px-5 py-4 text-sm">
+                          {supplier.contactPerson || "—"}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm">
+                            {supplier.email || "No email"}
+                          </p>
+                          <p className="mt-1 text-xs text-[#80695B]">
+                            {supplier.phone || "No phone"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-[#80695B]">
+                          {[
+                            supplier.city,
+                            supplier.state,
+                          ]
+                            .filter(Boolean)
+                            .join(", ") || "—"}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="font-semibold tabular-nums">
+                            {supplier._count?.purchaseOrders ?? 0}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                              supplier.isActive
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : "border-gray-200 bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {supplier.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(supplier)}
+                              disabled={busy}
+                              title="Edit supplier"
+                              className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs font-semibold hover:bg-[#F8F3ED] disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => toggleStatus(supplier)}
+                              disabled={busy}
+                              title={
+                                supplier.isActive
+                                  ? "Deactivate"
+                                  : "Activate"
+                              }
+                              className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs font-semibold hover:bg-[#F8F3ED] disabled:opacity-50"
+                            >
+                              {busy
+                                ? "Please wait..."
+                                : supplier.isActive
+                                  ? "Disable"
+                                  : "Enable"}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => deleteSupplier(supplier)}
+                              disabled={
+                                busy ||
+                                supplier._count.purchaseOrders > 0
+                              }
+                              title={
+                                supplier._count.purchaseOrders > 0
+                                  ? "Cannot delete supplier with purchase orders"
+                                  : "Delete supplier"
+                              }
+                              className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Delete
+                            </button>
                           </div>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4 text-sm">
-                        {supplier.contactPerson || "—"}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <p className="text-sm">
-                          {supplier.email || "No email"}
-                        </p>
-                        <p className="mt-1 text-xs text-[#80695B]">
-                          {supplier.phone || "No phone"}
-                        </p>
-                      </td>
-
-                      <td className="px-5 py-4 text-sm text-[#80695B]">
-                        {[supplier.city, supplier.state]
-                          .filter(Boolean)
-                          .join(", ") || "—"}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span className="font-semibold tabular-nums">
-                          {supplier._count.purchaseOrders}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                            supplier.isActive
-                              ? "border-green-200 bg-green-50 text-green-700"
-                              : "border-gray-200 bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {supplier.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openEditModal(supplier)}
-                            title="Edit supplier"
-                            className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs font-semibold hover:bg-[#F8F3ED]"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            onClick={() => toggleStatus(supplier)}
-                            title={supplier.isActive ? "Deactivate" : "Activate"}
-                            className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs font-semibold hover:bg-[#F8F3ED]"
-                          >
-                            {supplier.isActive ? "Disable" : "Enable"}
-                          </button>
-
-                          <button
-                            onClick={() => deleteSupplier(supplier)}
-                            disabled={supplier._count.purchaseOrders > 0}
-                            title={
-                              supplier._count.purchaseOrders > 0
-                                ? "Cannot delete supplier with purchase orders"
-                                : "Delete supplier"
-                            }
-                            className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -592,14 +717,18 @@ export default function SuppliersPage() {
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             onMouseDown={(event) => {
-              if (event.target === event.currentTarget) closeModal();
+              if (event.target === event.currentTarget) {
+                closeModal();
+              }
             }}
           >
             <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#EADED4] bg-white px-6 py-5">
                 <div>
                   <h2 className="text-xl font-bold">
-                    {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
+                    {editingSupplier
+                      ? "Edit Supplier"
+                      : "Add New Supplier"}
                   </h2>
 
                   <p className="mt-1 text-sm text-[#80695B]">
@@ -608,17 +737,25 @@ export default function SuppliersPage() {
                 </div>
 
                 <button
+                  type="button"
                   onClick={closeModal}
                   disabled={saving}
-                  className="rounded-lg px-3 py-2 text-xl text-[#80695B] hover:bg-[#F8F3ED]"
+                  className="rounded-lg px-3 py-2 text-xl text-[#80695B] hover:bg-[#F8F3ED] disabled:opacity-50"
+                  aria-label="Close modal"
                 >
                   ✕
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5 p-6">
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-5 p-6"
+              >
                 {error && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  >
                     {error}
                   </div>
                 )}
@@ -632,32 +769,44 @@ export default function SuppliersPage() {
                     <FormField
                       label="Supplier Name *"
                       value={form.name}
-                      onChange={(value) => handleInputChange("name", value)}
+                      onChange={(value) =>
+                        handleInputChange("name", value)
+                      }
                       placeholder="e.g. Premium Coffee Beans"
                       required
+                      maxLength={150}
                     />
 
                     <FormField
                       label="Contact Person"
                       value={form.contactPerson}
-                      onChange={(value) => handleInputChange("contactPerson", value)}
+                      onChange={(value) =>
+                        handleInputChange("contactPerson", value)
+                      }
                       placeholder="Contact person's name"
+                      maxLength={150}
                     />
 
                     <FormField
                       label="Email Address"
                       type="email"
                       value={form.email}
-                      onChange={(value) => handleInputChange("email", value)}
+                      onChange={(value) =>
+                        handleInputChange("email", value)
+                      }
                       placeholder="supplier@example.com"
+                      maxLength={254}
                     />
 
                     <FormField
                       label="Phone Number"
                       type="tel"
                       value={form.phone}
-                      onChange={(value) => handleInputChange("phone", value)}
+                      onChange={(value) =>
+                        handleInputChange("phone", value)
+                      }
                       placeholder="9876543210"
+                      maxLength={30}
                     />
                   </div>
                 </div>
@@ -671,48 +820,68 @@ export default function SuppliersPage() {
                     <FormField
                       label="Address"
                       value={form.address}
-                      onChange={(value) => handleInputChange("address", value)}
+                      onChange={(value) =>
+                        handleInputChange("address", value)
+                      }
                       placeholder="Street / Area"
+                      maxLength={500}
                     />
 
                     <FormField
                       label="City"
                       value={form.city}
-                      onChange={(value) => handleInputChange("city", value)}
+                      onChange={(value) =>
+                        handleInputChange("city", value)
+                      }
                       placeholder="Patna"
+                      maxLength={100}
                     />
 
                     <FormField
                       label="State"
                       value={form.state}
-                      onChange={(value) => handleInputChange("state", value)}
+                      onChange={(value) =>
+                        handleInputChange("state", value)
+                      }
                       placeholder="Bihar"
+                      maxLength={100}
                     />
 
                     <FormField
                       label="PIN Code"
                       value={form.pincode}
-                      onChange={(value) => handleInputChange("pincode", value)}
+                      onChange={(value) =>
+                        handleInputChange("pincode", value)
+                      }
                       placeholder="800001"
+                      maxLength={20}
                     />
                   </div>
                 </div>
 
                 <div className="border-t border-[#EADED4] pt-5">
-                  <label className="mb-2 block text-sm font-semibold">
+                  <label
+                    htmlFor="supplier-notes"
+                    className="mb-2 block text-sm font-semibold"
+                  >
                     Additional Notes
                   </label>
 
                   <textarea
+                    id="supplier-notes"
                     value={form.notes}
                     onChange={(event) =>
                       handleInputChange("notes", event.target.value)
                     }
                     rows={3}
-                    maxLength={500}
+                    maxLength={1000}
                     placeholder="Payment terms, product details, delivery information..."
                     className="w-full resize-y rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none focus:border-[#A76535]"
                   />
+
+                  <p className="mt-1 text-right text-xs text-[#80695B]">
+                    {form.notes.length}/1000
+                  </p>
                 </div>
 
                 <div className="flex flex-col-reverse justify-end gap-3 border-t border-[#EADED4] pt-5 sm:flex-row">
@@ -746,10 +915,7 @@ export default function SuppliersPage() {
   );
 }
 
-// ==========================================
 // SUMMARY CARD
-// ==========================================
-
 function SummaryCard({
   title,
   value,
@@ -764,7 +930,9 @@ function SummaryCard({
   return (
     <div className="rounded-2xl border border-[#EADED4] bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-[#80695B]">{title}</p>
+        <p className="text-sm font-medium text-[#80695B]">
+          {title}
+        </p>
 
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F8F3ED] text-lg font-bold text-[#754426]">
           {icon}
@@ -782,10 +950,7 @@ function SummaryCard({
   );
 }
 
-// ==========================================
 // FORM FIELD
-// ==========================================
-
 function FormField({
   label,
   value,
@@ -793,6 +958,7 @@ function FormField({
   placeholder,
   type = "text",
   required = false,
+  maxLength = 500,
 }: {
   label: string;
   value: string;
@@ -800,6 +966,7 @@ function FormField({
   placeholder?: string;
   type?: string;
   required?: boolean;
+  maxLength?: number;
 }) {
   return (
     <div>
@@ -813,7 +980,7 @@ function FormField({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
-        maxLength={500}
+        maxLength={maxLength}
         className="w-full rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none transition focus:border-[#A76535] focus:ring-2 focus:ring-[#A76535]/10"
       />
     </div>

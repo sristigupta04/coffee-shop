@@ -1,5 +1,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/app/lib/prisma";
 import { getcurrentuser } from "@/app/lib/auth";
@@ -16,45 +17,50 @@ const ORDER_STATUSES = [
   "CANCELLED",
 ] as const;
 
+const REFUND_STATUSES = [
+  "NOT_REQUESTED",
+  "REFUNDING",
+  "PENDING",
+  "PROCESSED",
+  "FAILED",
+] as const;
+
 export async function GET(request: NextRequest) {
   try {
-    // Authentication
     const user = await getcurrentuser();
 
     if (!user) {
       return NextResponse.json(
-        { message: "Authentication required." },
+        { success: false, message: "Authentication required." },
         { status: 401 }
       );
     }
 
     if (user.role !== "ADMIN") {
       return NextResponse.json(
-        { message: "Admin access required." },
+        { success: false, message: "Admin access required." },
         { status: 403 }
       );
     }
 
-    // Query parameters
     const params = request.nextUrl.searchParams;
 
     const search = params.get("search")?.trim() ?? "";
     const requestedStatus = params.get("status")?.toUpperCase() ?? "";
+    const requestedRefundStatus =
+      params.get("refundStatus")?.toUpperCase() ?? "";
 
-    const page = Math.max(
-      1,
-      Number.parseInt(params.get("page") ?? "1", 10) || 1
-    );
+    const parsedPage = Number.parseInt(params.get("page") ?? "1", 10);
+    const parsedLimit = Number.parseInt(params.get("limit") ?? "10", 10);
 
-    const limit = Math.min(
-      50,
-      Math.max(
-        1,
-        Number.parseInt(params.get("limit") ?? "10", 10) || 10
-      )
-    );
+    const page = Number.isFinite(parsedPage)
+      ? Math.max(1, parsedPage)
+      : 1;
 
-    // Validate status
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(50, Math.max(1, parsedLimit))
+      : 10;
+
     if (
       requestedStatus &&
       !ORDER_STATUSES.includes(
@@ -62,16 +68,34 @@ export async function GET(request: NextRequest) {
       )
     ) {
       return NextResponse.json(
-        { message: "Invalid order status." },
+        { success: false, message: "Invalid order status." },
         { status: 400 }
       );
     }
 
-    // Database filters
-    const where = {
+    if (
+      requestedRefundStatus &&
+      !REFUND_STATUSES.includes(
+        requestedRefundStatus as (typeof REFUND_STATUSES)[number]
+      )
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Invalid refund status." },
+        { status: 400 }
+      );
+    }
+
+    const where: Prisma.OrderWhereInput = {
       ...(requestedStatus
         ? {
             status: requestedStatus as (typeof ORDER_STATUSES)[number],
+          }
+        : {}),
+
+      ...(requestedRefundStatus
+        ? {
+            refundStatus: requestedRefundStatus as
+              (typeof REFUND_STATUSES)[number],
           }
         : {}),
 
@@ -81,7 +105,7 @@ export async function GET(request: NextRequest) {
               {
                 id: {
                   contains: search,
-                  mode: "insensitive" as const,
+                  mode: "insensitive",
                 },
               },
               {
@@ -89,7 +113,7 @@ export async function GET(request: NextRequest) {
                   is: {
                     name: {
                       contains: search,
-                      mode: "insensitive" as const,
+                      mode: "insensitive",
                     },
                   },
                 },
@@ -99,7 +123,7 @@ export async function GET(request: NextRequest) {
                   is: {
                     email: {
                       contains: search,
-                      mode: "insensitive" as const,
+                      mode: "insensitive",
                     },
                   },
                 },
@@ -107,7 +131,7 @@ export async function GET(request: NextRequest) {
               {
                 phone: {
                   contains: search,
-                  mode: "insensitive" as const,
+                  mode: "insensitive",
                 },
               },
             ],
@@ -115,7 +139,6 @@ export async function GET(request: NextRequest) {
         : {}),
     };
 
-    // Fetch orders and total count
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
@@ -164,7 +187,10 @@ export async function GET(request: NextRequest) {
     console.error("[ADMIN_ORDERS_GET_ERROR]", error);
 
     return NextResponse.json(
-      { message: "Unable to fetch orders." },
+      {
+        success: false,
+        message: "Unable to fetch orders.",
+      },
       { status: 500 }
     );
   }

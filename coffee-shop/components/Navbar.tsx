@@ -1,108 +1,150 @@
+
 "use client";
 
 import Link from "next/link";
-import {Heart} from "lucide-react";
-import  Search from "@/components/SearchBar";
+import { Heart } from "lucide-react";
+import Search from "@/components/SearchBar";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+
 import {
   Home,
   Coffee,
- LogIn,
- Settings,
+  LogIn,
+  Settings,
   ShoppingCart,
 } from "lucide-react";
 
 export default function Navbar() {
-const pathname = usePathname();
-const [wishlistcount, setWishlistcount] = useState(0);
-const [cartcount,setcartcount] = useState(0);
+  const pathname = usePathname();
 
-const {status, data: session} = useSession();
-useEffect(()=>{
-  const update = async() => {
+  const [wishlistcount, setWishlistcount] = useState(0);
+  const [cartcount, setcartcount] = useState(0);
 
-if(status !== "authenticated" || !session?.user?.id){
-  setcartcount(0);
-  return;
-}
+  const { status, data: session } = useSession();
 
-try{
-  const userId = session.user.id;
-  const res = await fetch(`/api/cart/${userId}`,{
-     credentials: "include",
-  cache: "no-store",
-  });
+  const isAdminRoute = pathname.startsWith("/admin");
 
-  const data = await res.json();
-  
-  if(!res.ok){
-    return;
-  }
-const items = data.data?.items || [];
-  const count = items.reduce((acc:number, item:any) => acc + (item.quantity || 0), 0);
-  setcartcount(count);
-  
-} catch(error){
-  console.error("Error fetching cart items:", error);
-  setcartcount(0);
-}
-  };
+  // ==========================================
+  // CART AND WISHLIST COUNTS
+  // ==========================================
 
-update();
-const updateWishlistCount = async () => {
+  useEffect(() => {
+    // Do not fetch customer cart/wishlist on admin pages.
+    if (isAdminRoute) {
+      return;
+    }
 
-  if(!session?.user?.id){
-    setWishlistcount(0);
-    return;
-  }
-  try{
-    const res = await fetch(`/api/wishlist`);
-    if(!res.ok)
-      {
+    const update = async () => {
+      if (
+        status !== "authenticated" ||
+        !session?.user?.id
+      ) {
+        setcartcount(0);
         return;
       }
-      const data = await res.json();
-      setWishlistcount(data.wishlist?.length || 0);
-  } catch(error){
-    console.error("Error fetching wishlist count:", error);
-    setWishlistcount(0);
-  }
-  }
-  updateWishlistCount();
-const handlecartUpdate = (event: CustomEvent) => {
-  const custoMEvent = event as CustomEvent;
-  if(typeof custoMEvent.detail === "number"){
-    setcartcount(custoMEvent.detail);
-  }else{
+
+      try {
+        const userId = session.user.id;
+
+        const res = await fetch(`/api/cart/${userId}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          return;
+        }
+
+        const items = data.data?.items || [];
+
+        const count = items.reduce(
+          (acc: number, item: any) =>
+            acc + (item.quantity || 0),
+          0
+        );
+
+        setcartcount(count);
+      } catch (error) {
+        console.error("Error fetching cart items:", error);
+        setcartcount(0);
+      }
+    };
+
+    const updateWishlistCount = async () => {
+      if (
+        status !== "authenticated" ||
+        !session?.user?.id
+      ) {
+        setWishlistcount(0);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/wishlist", {
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          return;
+        }
+
+        const data = await res.json();
+
+        setWishlistcount(data.wishlist?.length || 0);
+      } catch (error) {
+        console.error("Error fetching wishlist count:", error);
+        setWishlistcount(0);
+      }
+    };
+
     update();
+    updateWishlistCount();
+
+    const handlecartUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+
+      if (typeof customEvent.detail === "number") {
+        setcartcount(customEvent.detail);
+      } else {
+        update();
+      }
+    };
+
+    window.addEventListener(
+      "cartUpdated",
+      handlecartUpdate
+    );
+
+    return () => {
+      window.removeEventListener(
+        "cartUpdated",
+        handlecartUpdate
+      );
+    };
+  }, [status, session?.user?.id, isAdminRoute]);
+
+  // ==========================================
+  // HIDE CUSTOMER NAVBAR
+  // ==========================================
+
+  if (isAdminRoute || pathname === "/login") {
+    return null;
   }
-}
 
-window.addEventListener(
-  "cartUpdated",
-  handlecartUpdate as EventListener
-);
+  // ==========================================
+  // CUSTOMER NAVBAR
+  // ==========================================
 
-return () => {
-  window.removeEventListener(
-    "cartUpdated",
-    handlecartUpdate as EventListener
-  );
-}
-},
-  [status, session?.user?.id]);
-
- if (pathname === "/login") {
-  return null;
-}
-
- return (
+  return (
     <nav className="sticky top-0 z-50 w-full border-b border-[#eadbc9] bg-[#fffaf3] shadow-sm">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-10">
 
-        {/* Logo */}
+        {/* LOGO */}
+
         <Link href="/" className="flex items-center">
           <img
             src="/logo.jpg"
@@ -111,7 +153,8 @@ return () => {
           />
         </Link>
 
-        {/* Navigation */}
+        {/* NAVIGATION */}
+
         <div className="flex items-center gap-3">
 
           <NavItem
@@ -126,17 +169,20 @@ return () => {
             text="Menu"
           />
 
-          {/* Search */}
+          {/* SEARCH */}
+
           <Search />
 
-          {/* Settings */}
+          {/* SETTINGS */}
+
           <NavItem
             href="/settings"
             icon={<Settings size={18} />}
             text="Settings"
           />
 
-          {/* Cart */}
+          {/* CART */}
+
           <Link
             href="/cart"
             className="relative rounded-xl p-3 text-[#4b2e1f] transition hover:bg-[#f3e5d3]"
@@ -148,17 +194,23 @@ return () => {
             </span>
           </Link>
 
+          {/* WISHLIST */}
 
-<Link href="/wishlist" className="relative rounded-xl p-3 text-[#4b2e1f] transition hover:bg-[#f3e5d3]">
-<Heart size={22} 
-className= "h-5 w-5"  />
-{wishlistcount > 0 && (
-  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#a85d25] text-xs font-bold text-white">
-    {wishlistcount}
-  </span>
-)}
-</Link>
-          {/* Login */}
+          <Link
+            href="/wishlist"
+            className="relative rounded-xl p-3 text-[#4b2e1f] transition hover:bg-[#f3e5d3]"
+          >
+            <Heart size={22} className="h-5 w-5" />
+
+            {wishlistcount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#a85d25] text-xs font-bold text-white">
+                {wishlistcount}
+              </span>
+            )}
+          </Link>
+
+          {/* LOGIN */}
+
           <Link
             href="/login"
             className="ml-2 flex items-center gap-2 rounded-xl bg-[#8b4a24] px-5 py-2.5 font-medium text-white transition hover:bg-[#6f381b]"
@@ -172,6 +224,10 @@ className= "h-5 w-5"  />
     </nav>
   );
 }
+
+// ==========================================
+// NAV ITEM
+// ==========================================
 
 function NavItem({
   href,

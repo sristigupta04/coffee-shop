@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Movement = {
   id: string;
@@ -14,17 +15,17 @@ type Movement = {
   product: {
     id: string;
     name: string;
-    image: string;
-    price: number;
+    image: string | null;
+    price: number | string;
     category: {
       name: string;
-    };
+    } | null;
   };
   user: {
     id: string;
-    name: string;
+    name: string | null;
     email: string | null;
-  };
+  } | null;
 };
 
 type Summary = {
@@ -54,18 +55,20 @@ const initialSummary: Summary = {
   removedQuantity: 0,
 };
 
+const initialPagination: Pagination = {
+  page: 1,
+  pageSize: 20,
+  totalRecords: 0,
+  totalPages: 0,
+  hasNextPage: false,
+  hasPreviousPage: false,
+};
+
 export default function InventoryHistoryPage() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [summary, setSummary] = useState<Summary>(initialSummary);
-
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    pageSize: 20,
-    totalRecords: 0,
-    totalPages: 0,
-    hasNextPage: false,
-    hasPreviousPage: false,
-  });
+  const [pagination, setPagination] =
+    useState<Pagination>(initialPagination);
 
   const [search, setSearch] = useState("");
   const [type, setType] = useState("ALL");
@@ -74,61 +77,143 @@ export default function InventoryHistoryPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchHistory = useCallback(async (page = 1) => {
-    try {
-      setLoading(true);
-      setError("");
+  const fetchHistory = useCallback(
+    async (page: number, signal?: AbortSignal) => {
+      try {
+        setLoading(true);
+        setError("");
 
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: "20",
-      });
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: "20",
+        });
 
-      if (search.trim()) params.set("search", search.trim());
-      if (type !== "ALL") params.set("type", type);
-      if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
-      if (to) params.set("to", new Date(`${to}T23:59:59.999`).toISOString());
-
-      const response = await fetch(
-        `/api/admin/inventory/history?${params.toString()}`,
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
+        if (search.trim()) {
+          params.set("search", search.trim());
         }
-      );
 
-      const result = await response.json();
+        if (type !== "ALL") {
+          params.set("type", type);
+        }
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to load stock history.");
+        if (from) {
+          const startDate = new Date(`${from}T00:00:00`);
+
+          if (Number.isNaN(startDate.getTime())) {
+            throw new Error("Invalid start date.");
+          }
+
+          params.set("from", startDate.toISOString());
+        }
+
+        if (to) {
+          const endDate = new Date(`${to}T23:59:59.999`);
+
+          if (Number.isNaN(endDate.getTime())) {
+            throw new Error("Invalid end date.");
+          }
+
+          params.set("to", endDate.toISOString());
+        }
+
+        const response = await fetch(
+          `/api/admin/inventory/history?${params.toString()}`,
+          {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+            signal,
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message || "Failed to load stock history."
+          );
+        }
+
+        setMovements(
+          Array.isArray(result.movements) ? result.movements : []
+        );
+
+        setSummary({
+          totalMovements: Number(
+            result.summary?.totalMovements ?? 0
+          ),
+          additions: Number(result.summary?.additions ?? 0),
+          removals: Number(result.summary?.removals ?? 0),
+          manualAdjustments: Number(
+            result.summary?.manualAdjustments ?? 0
+          ),
+          addedQuantity: Number(
+            result.summary?.addedQuantity ?? 0
+          ),
+          removedQuantity: Number(
+            result.summary?.removedQuantity ?? 0
+          ),
+        });
+
+        setPagination({
+          page: Number(result.pagination?.page ?? page),
+          pageSize: Number(result.pagination?.pageSize ?? 20),
+          totalRecords: Number(
+            result.pagination?.totalRecords ?? 0
+          ),
+          totalPages: Number(result.pagination?.totalPages ?? 0),
+          hasNextPage: Boolean(
+            result.pagination?.hasNextPage
+          ),
+          hasPreviousPage: Boolean(
+            result.pagination?.hasPreviousPage
+          ),
+        });
+
+        setCurrentPage(page);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong."
+        );
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
-
-      setMovements(result.movements ?? []);
-      setSummary(result.summary ?? initialSummary);
-      setPagination(result.pagination);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [search, type, from, to]);
+    },
+    [search, type, from, to]
+  );
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const timer = setTimeout(() => {
-      fetchHistory(1);
+      fetchHistory(currentPage, controller.signal);
     }, 350);
 
-    return () => clearTimeout(timer);
-  }, [fetchHistory]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [fetchHistory, currentPage, refreshKey]);
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleString("en-IN", {
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "Not available";
+    }
+
+    return parsedDate.toLocaleString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -137,14 +222,17 @@ export default function InventoryHistoryPage() {
     });
   };
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
+  const formatCurrency = (amount: number | string) => {
+    const value = Number(amount);
+
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 2,
-    }).format(amount);
+    }).format(Number.isFinite(value) ? value : 0);
+  };
 
-  const getMovementStyle = (movementType: string) => {
+  const getMovementStyle = (movementType: Movement["type"]) => {
     switch (movementType) {
       case "ADD":
         return {
@@ -152,12 +240,14 @@ export default function InventoryHistoryPage() {
           color: "bg-green-50 text-green-700 border-green-200",
           sign: "+",
         };
+
       case "REMOVE":
         return {
           label: "Stock Removed",
           color: "bg-red-50 text-red-700 border-red-200",
           sign: "-",
         };
+
       default:
         return {
           label: "Stock Adjusted",
@@ -172,12 +262,24 @@ export default function InventoryHistoryPage() {
     setType("ALL");
     setFrom("");
     setTo("");
+    setCurrentPage(1);
+  };
+
+  const changePage = (page: number) => {
+    if (page < 1 || page > pagination.totalPages || loading) {
+      return;
+    }
+
+    setCurrentPage(page);
+  };
+
+  const refreshHistory = () => {
+    setRefreshKey((value) => value + 1);
   };
 
   return (
     <div className="min-h-screen bg-[#F8F3ED] px-4 py-6 text-[#2B1B14] sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-7">
-
         {/* HEADER */}
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -194,12 +296,12 @@ export default function InventoryHistoryPage() {
             </p>
           </div>
 
-          <a
+          <Link
             href="/admin/inventory"
             className="inline-flex items-center justify-center rounded-xl border border-[#EADED4] bg-white px-5 py-3 text-sm font-semibold transition hover:bg-[#FDF9F5]"
           >
             ← Back to Inventory
-          </a>
+          </Link>
         </div>
 
         {/* SUMMARY CARDS */}
@@ -244,6 +346,7 @@ export default function InventoryHistoryPage() {
             </div>
 
             <button
+              type="button"
               onClick={clearFilters}
               className="rounded-lg border border-[#EADED4] px-4 py-2 text-sm font-semibold hover:bg-[#F8F3ED]"
             >
@@ -255,14 +358,22 @@ export default function InventoryHistoryPage() {
             <input
               type="search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search product, admin, reason..."
+              aria-label="Search movement history"
               className="rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none transition focus:border-[#A76535] focus:ring-2 focus:ring-[#A76535]/10"
             />
 
             <select
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(event) => {
+                setType(event.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="Filter movement type"
               className="rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             >
               <option value="ALL">All Actions</option>
@@ -275,7 +386,11 @@ export default function InventoryHistoryPage() {
               type="date"
               value={from}
               max={to || undefined}
-              onChange={(e) => setFrom(e.target.value)}
+              onChange={(event) => {
+                setFrom(event.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="Filter from date"
               className="rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             />
 
@@ -283,7 +398,11 @@ export default function InventoryHistoryPage() {
               type="date"
               value={to}
               min={from || undefined}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={(event) => {
+                setTo(event.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="Filter to date"
               className="rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             />
           </div>
@@ -292,19 +411,33 @@ export default function InventoryHistoryPage() {
         {/* HISTORY TABLE */}
         <section className="overflow-hidden rounded-2xl border border-[#EADED4] bg-white shadow-sm">
           <div className="flex flex-col justify-between gap-2 border-b border-[#EADED4] px-5 py-4 sm:flex-row sm:items-center">
-            <h2 className="font-bold">Movement Logs</h2>
+            <div>
+              <h2 className="font-bold">Movement Logs</h2>
+              <p className="mt-1 text-sm text-[#80695B]">
+                {pagination.totalRecords.toLocaleString("en-IN")} records found
+              </p>
+            </div>
 
-            <span className="text-sm text-[#80695B]">
-              {pagination.totalRecords} records found
-            </span>
+            <button
+              type="button"
+              onClick={refreshHistory}
+              disabled={loading}
+              className="rounded-lg border border-[#EADED4] px-3 py-2 text-sm font-semibold hover:bg-[#F8F3ED] disabled:opacity-50"
+            >
+              ↻ Refresh
+            </button>
           </div>
 
           {error && (
-            <div className="m-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {error}
+            <div
+              role="alert"
+              className="m-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            >
+              <p>{error}</p>
               <button
-                onClick={() => fetchHistory(pagination.page)}
-                className="ml-3 font-bold underline"
+                type="button"
+                onClick={refreshHistory}
+                className="mt-2 font-bold underline"
               >
                 Retry
               </button>
@@ -313,7 +446,15 @@ export default function InventoryHistoryPage() {
 
           {loading ? (
             <div className="flex min-h-64 items-center justify-center">
-              <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#EADED4] border-t-[#754426]" />
+              <div
+                className="h-9 w-9 animate-spin rounded-full border-4 border-[#EADED4] border-t-[#754426]"
+                role="status"
+                aria-label="Loading stock history"
+              />
+            </div>
+          ) : error ? (
+            <div className="flex min-h-40 items-center justify-center px-5 text-center text-sm text-[#80695B]">
+              Unable to display movement records. Please retry.
             </div>
           ) : movements.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
@@ -321,7 +462,9 @@ export default function InventoryHistoryPage() {
                 📦
               </div>
 
-              <h3 className="font-bold">No movement records found</h3>
+              <h3 className="font-bold">
+                No movement records found
+              </h3>
 
               <p className="mt-2 max-w-sm text-sm text-[#80695B]">
                 Stock changes will appear here once an admin adds,
@@ -373,7 +516,8 @@ export default function InventoryHistoryPage() {
                                   {movement.product.name}
                                 </p>
                                 <p className="mt-1 text-xs text-[#80695B]">
-                                  {movement.product.category.name}
+                                  {movement.product.category?.name ??
+                                    "Uncategorized"}
                                 </p>
                               </div>
                             </div>
@@ -389,23 +533,23 @@ export default function InventoryHistoryPage() {
 
                           <td className="px-5 py-4 font-semibold tabular-nums">
                             {style.sign}
-                            {movement.quantity}
+                            {movement.quantity.toLocaleString("en-IN")}
                           </td>
 
                           <td className="px-5 py-4 text-[#80695B] tabular-nums">
-                            {movement.previousStock}
+                            {movement.previousStock.toLocaleString("en-IN")}
                           </td>
 
                           <td className="px-5 py-4 font-bold tabular-nums">
-                            {movement.newStock}
+                            {movement.newStock.toLocaleString("en-IN")}
                           </td>
 
                           <td className="px-5 py-4">
                             <p className="font-medium">
-                              {movement.user.name}
+                              {movement.user?.name || "Unknown Admin"}
                             </p>
                             <p className="mt-1 text-xs text-[#80695B]">
-                              {movement.user.email || "Admin"}
+                              {movement.user?.email || "Admin"}
                             </p>
                           </td>
 
@@ -429,25 +573,23 @@ export default function InventoryHistoryPage() {
                   Page {pagination.page} of{" "}
                   {Math.max(1, pagination.totalPages)}
                   {" · "}
-                  {pagination.totalRecords} total records
+                  {pagination.totalRecords.toLocaleString("en-IN")} total records
                 </p>
 
                 <div className="flex items-center gap-2">
                   <button
-                    disabled={!pagination.hasPreviousPage}
-                    onClick={() =>
-                      fetchHistory(pagination.page - 1)
-                    }
+                    type="button"
+                    disabled={!pagination.hasPreviousPage || loading}
+                    onClick={() => changePage(pagination.page - 1)}
                     className="rounded-lg border border-[#EADED4] px-4 py-2 text-sm font-semibold transition hover:bg-[#F8F3ED] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Previous
                   </button>
 
                   <button
-                    disabled={!pagination.hasNextPage}
-                    onClick={() =>
-                      fetchHistory(pagination.page + 1)
-                    }
+                    type="button"
+                    disabled={!pagination.hasNextPage || loading}
+                    onClick={() => changePage(pagination.page + 1)}
                     className="rounded-lg bg-[#754426] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#2B1B14] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Next
@@ -473,10 +615,6 @@ export default function InventoryHistoryPage() {
     </div>
   );
 }
-
-// ==========================================
-// SUMMARY CARD
-// ==========================================
 
 function SummaryCard({
   title,

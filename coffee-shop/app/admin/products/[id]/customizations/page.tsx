@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
 type Option = {
   id: string;
   name: string;
-  priceAdjustment: number;
+  priceAdjustment: number | string;
   isAvailable: boolean;
   sortOrder: number;
 };
@@ -42,9 +42,26 @@ const initialGroupForm = {
   sortOrder: 0,
 };
 
+const initialOptionForm = {
+  name: "",
+  priceAdjustment: "0",
+};
+
+async function readResponse(response: Response) {
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    throw new Error(
+      result?.message || `Request failed (${response.status})`
+    );
+  }
+
+  return result;
+}
+
 export default function ProductCustomizationsPage() {
-  const params = useParams();
-  const productId = params.id as string;
+  const params = useParams<{ id: string }>();
+  const productId = params.id;
 
   const [product, setProduct] = useState<Product | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -58,16 +75,10 @@ export default function ProductCustomizationsPage() {
   const [groupForm, setGroupForm] = useState(initialGroupForm);
 
   const [optionGroupId, setOptionGroupId] = useState<string | null>(null);
-  const [optionForm, setOptionForm] = useState({
-    name: "",
-    priceAdjustment: "0",
-  });
+  const [optionForm, setOptionForm] = useState(initialOptionForm);
 
   const [editingOption, setEditingOption] = useState<string | null>(null);
-  const [editOptionForm, setEditOptionForm] = useState({
-    name: "",
-    priceAdjustment: "0",
-  });
+  const [editOptionForm, setEditOptionForm] = useState(initialOptionForm);
 
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
 
@@ -83,17 +94,13 @@ export default function ProductCustomizationsPage() {
         { cache: "no-store" }
       );
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to fetch customizations");
-      }
+      const result = await readResponse(response);
 
       setProduct(result.data.product);
-      setGroups(result.data.groups);
+      setGroups(result.data.groups ?? []);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Something went wrong"
+        err instanceof Error ? err.message : "Failed to fetch customizations"
       );
     } finally {
       setLoading(false);
@@ -120,6 +127,13 @@ export default function ProductCustomizationsPage() {
     setShowGroupForm(false);
   };
 
+  const openCreateGroup = () => {
+    setEditingGroup(null);
+    setGroupForm(initialGroupForm);
+    setShowGroupForm(true);
+    setError("");
+  };
+
   const openEditGroup = (group: Group) => {
     setEditingGroup(group.id);
     setGroupForm({
@@ -133,10 +147,38 @@ export default function ProductCustomizationsPage() {
       sortOrder: group.sortOrder,
     });
     setShowGroupForm(true);
+    setError("");
   };
 
-  const saveGroup = async (event: React.FormEvent<HTMLFormElement>) => {
+  const saveGroup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!groupForm.name.trim()) {
+      showError("Group name is required");
+      return;
+    }
+
+    if (
+      groupForm.minSelections < 0 ||
+      groupForm.maxSelections < 1 ||
+      groupForm.minSelections > groupForm.maxSelections
+    ) {
+      showError("Please enter valid minimum and maximum selections");
+      return;
+    }
+
+    if (
+      groupForm.selectionType === "SINGLE" &&
+      groupForm.maxSelections !== 1
+    ) {
+      showError("Single selection groups must have maximum selections set to 1");
+      return;
+    }
+
+    if (groupForm.isRequired && groupForm.minSelections < 1) {
+      showError("Required groups must have at least one minimum selection");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -152,14 +194,14 @@ export default function ProductCustomizationsPage() {
       const response = await fetch(url, {
         method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(groupForm),
+        body: JSON.stringify({
+          ...groupForm,
+          name: groupForm.name.trim(),
+          description: groupForm.description.trim() || null,
+        }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to save group");
-      }
+      await readResponse(response);
 
       resetGroupForm();
       await fetchData();
@@ -183,17 +225,22 @@ export default function ProductCustomizationsPage() {
 
     try {
       setSaving(true);
+      setError("");
 
       const response = await fetch(
         `/api/admin/customization-groups/${groupId}`,
         { method: "DELETE" }
       );
 
-      const result = await response.json();
+      await readResponse(response);
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to delete group");
+      if (optionGroupId === groupId) {
+        setOptionGroupId(null);
       }
+
+      setExpandedGroups((current) =>
+        current.filter((id) => id !== groupId)
+      );
 
       await fetchData();
       showMessage("Customization group deleted successfully");
@@ -206,34 +253,49 @@ export default function ProductCustomizationsPage() {
     }
   };
 
-  const addOption = async (event: React.FormEvent<HTMLFormElement>) => {
+  const addOption = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!optionGroupId) return;
 
+    const price = Number(optionForm.priceAdjustment);
+
+    if (!optionForm.name.trim()) {
+      showError("Option name is required");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      showError("Enter a valid non-negative additional price");
+      return;
+    }
+
     try {
       setSaving(true);
+      setError("");
 
+      const selectedGroup = groups.find(
+        (group) => group.id === optionGroupId
+      );
+
+      // Correct endpoint according to the existing API route.
       const response = await fetch(
-        `/api/admin/products/${productId}/customizations/${optionGroupId}/options`,
+        `/api/admin/products/${productId}/${optionGroupId}/options`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: optionForm.name,
-            priceAdjustment: Number(optionForm.priceAdjustment),
+            name: optionForm.name.trim(),
+            priceAdjustment: price,
             isAvailable: true,
+            sortOrder: selectedGroup?.options.length ?? 0,
           }),
         }
       );
 
-      const result = await response.json();
+      await readResponse(response);
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to add option");
-      }
-
-      setOptionForm({ name: "", priceAdjustment: "0" });
+      setOptionForm(initialOptionForm);
       setOptionGroupId(null);
 
       await fetchData();
@@ -253,16 +315,30 @@ export default function ProductCustomizationsPage() {
       name: option.name,
       priceAdjustment: String(option.priceAdjustment),
     });
+    setError("");
   };
 
   const saveOption = async (
-    event: React.FormEvent<HTMLFormElement>,
+    event: FormEvent<HTMLFormElement>,
     optionId: string
   ) => {
     event.preventDefault();
 
+    const price = Number(editOptionForm.priceAdjustment);
+
+    if (!editOptionForm.name.trim()) {
+      showError("Option name is required");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price < 0) {
+      showError("Enter a valid non-negative additional price");
+      return;
+    }
+
     try {
       setSaving(true);
+      setError("");
 
       const response = await fetch(
         `/api/admin/customization-options/${optionId}`,
@@ -270,17 +346,13 @@ export default function ProductCustomizationsPage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: editOptionForm.name,
-            priceAdjustment: Number(editOptionForm.priceAdjustment),
+            name: editOptionForm.name.trim(),
+            priceAdjustment: price,
           }),
         }
       );
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to update option");
-      }
+      await readResponse(response);
 
       setEditingOption(null);
       await fetchData();
@@ -297,6 +369,7 @@ export default function ProductCustomizationsPage() {
   const toggleOption = async (option: Option) => {
     try {
       setSaving(true);
+      setError("");
 
       const response = await fetch(
         `/api/admin/customization-options/${option.id}`,
@@ -309,17 +382,13 @@ export default function ProductCustomizationsPage() {
         }
       );
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to update availability");
-      }
+      await readResponse(response);
 
       await fetchData();
       showMessage("Option availability updated");
     } catch (err) {
       showError(
-        err instanceof Error ? err.message : "Failed to update option"
+        err instanceof Error ? err.message : "Failed to update availability"
       );
     } finally {
       setSaving(false);
@@ -331,16 +400,17 @@ export default function ProductCustomizationsPage() {
 
     try {
       setSaving(true);
+      setError("");
 
       const response = await fetch(
         `/api/admin/customization-options/${optionId}`,
         { method: "DELETE" }
       );
 
-      const result = await response.json();
+      await readResponse(response);
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to delete option");
+      if (editingOption === optionId) {
+        setEditingOption(null);
       }
 
       await fetchData();
@@ -373,8 +443,11 @@ export default function ProductCustomizationsPage() {
   if (!product && error) {
     return (
       <div className="m-6 rounded-xl border border-red-200 bg-red-50 p-5 text-red-700">
-        {error}
-        <button onClick={fetchData} className="ml-3 underline">
+        <p>{error}</p>
+        <button
+          onClick={fetchData}
+          className="mt-3 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium"
+        >
           Retry
         </button>
       </div>
@@ -404,10 +477,7 @@ export default function ProductCustomizationsPage() {
         </div>
 
         <button
-          onClick={() => {
-            resetGroupForm();
-            setShowGroupForm(true);
-          }}
+          onClick={openCreateGroup}
           className="rounded-xl bg-[#754426] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#5F351E]"
         >
           + Create Customization Group
@@ -415,16 +485,34 @@ export default function ProductCustomizationsPage() {
       </div>
 
       {error && (
-        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-          <button onClick={() => setError("")}>✕</button>
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          <span>{error}</span>
+          <button
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+            className="shrink-0"
+          >
+            ✕
+          </button>
         </div>
       )}
 
       {success && (
-        <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-          {success}
-          <button onClick={() => setSuccess("")}>✕</button>
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+        >
+          <span>{success}</span>
+          <button
+            onClick={() => setSuccess("")}
+            aria-label="Dismiss success message"
+            className="shrink-0"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -442,11 +530,15 @@ export default function ProductCustomizationsPage() {
 
       {showGroupForm && (
         <div className="rounded-2xl border border-[#EADED4] bg-white p-5 md:p-6">
-          <div className="mb-5 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-[#2B1B14]">
-              {editingGroup ? "Edit Customization Group" : "Create Customization Group"}
+              {editingGroup
+                ? "Edit Customization Group"
+                : "Create Customization Group"}
             </h2>
+
             <button
+              type="button"
               onClick={resetGroupForm}
               className="text-sm text-[#80695B]"
             >
@@ -462,9 +554,13 @@ export default function ProductCustomizationsPage() {
                 </label>
                 <input
                   required
+                  maxLength={100}
                   value={groupForm.name}
                   onChange={(e) =>
-                    setGroupForm({ ...groupForm, name: e.target.value })
+                    setGroupForm({
+                      ...groupForm,
+                      name: e.target.value,
+                    })
                   }
                   placeholder="e.g. Choose Your Size"
                   className="w-full rounded-xl border border-[#EADED4] px-4 py-3 outline-none focus:border-[#754426]"
@@ -479,15 +575,18 @@ export default function ProductCustomizationsPage() {
                   value={groupForm.selectionType}
                   onChange={(e) => {
                     const type = e.target.value as "SINGLE" | "MULTIPLE";
+                    const maxSelections =
+                      type === "SINGLE"
+                        ? 1
+                        : Math.max(2, groupForm.maxSelections);
+
                     setGroupForm({
                       ...groupForm,
                       selectionType: type,
-                      minSelections:
-                        type === "SINGLE"
-                          ? groupForm.isRequired ? 1 : 0
-                          : groupForm.minSelections,
-                      maxSelections:
-                        type === "SINGLE" ? 1 : Math.max(2, groupForm.maxSelections),
+                      maxSelections,
+                      minSelections: groupForm.isRequired
+                        ? 1
+                        : Math.min(groupForm.minSelections, maxSelections),
                     });
                   }}
                   className="w-full rounded-xl border border-[#EADED4] bg-white px-4 py-3"
@@ -504,6 +603,7 @@ export default function ProductCustomizationsPage() {
               </label>
               <textarea
                 rows={2}
+                maxLength={500}
                 value={groupForm.description}
                 onChange={(e) =>
                   setGroupForm({
@@ -614,7 +714,11 @@ export default function ProductCustomizationsPage() {
                 disabled={saving}
                 className="rounded-xl bg-[#754426] px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {saving ? "Saving..." : editingGroup ? "Update Group" : "Create Group"}
+                {saving
+                  ? "Saving..."
+                  : editingGroup
+                    ? "Update Group"
+                    : "Create Group"}
               </button>
 
               <button
@@ -630,7 +734,7 @@ export default function ProductCustomizationsPage() {
       )}
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-[#2B1B14]">
             Customization Groups
           </h2>
@@ -649,7 +753,7 @@ export default function ProductCustomizationsPage() {
               Create your first customization group for this product.
             </p>
             <button
-              onClick={() => setShowGroupForm(true)}
+              onClick={openCreateGroup}
               className="mt-5 rounded-xl bg-[#754426] px-5 py-3 text-sm font-semibold text-white"
             >
               Create First Group
@@ -662,11 +766,12 @@ export default function ProductCustomizationsPage() {
               className="overflow-hidden rounded-2xl border border-[#EADED4] bg-white"
             >
               <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-                <div>
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-bold text-[#2B1B14]">
                       {group.name}
                     </h3>
+
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-medium ${
                         group.isActive
@@ -676,6 +781,7 @@ export default function ProductCustomizationsPage() {
                     >
                       {group.isActive ? "Active" : "Inactive"}
                     </span>
+
                     <span className="rounded-full bg-[#F8F3ED] px-3 py-1 text-xs text-[#754426]">
                       {group.selectionType}
                     </span>
@@ -686,17 +792,17 @@ export default function ProductCustomizationsPage() {
                   </p>
 
                   <p className="mt-2 text-xs text-[#80695B]">
-                    {group.isRequired ? "Required" : "Optional"} ·
-                    {" "}Min {group.minSelections} ·
-                    {" "}Max {group.maxSelections} ·
-                    {" "}{group.options.length} options
+                    {group.isRequired ? "Required" : "Optional"} · Min{" "}
+                    {group.minSelections} · Max {group.maxSelections} ·{" "}
+                    {group.options.length} options
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => openEditGroup(group)}
-                    className="rounded-lg border border-[#EADED4] px-3 py-2 text-sm text-[#754426]"
+                    disabled={saving}
+                    className="rounded-lg border border-[#EADED4] px-3 py-2 text-sm text-[#754426] disabled:opacity-50"
                   >
                     Edit
                   </button>
@@ -704,7 +810,7 @@ export default function ProductCustomizationsPage() {
                   <button
                     onClick={() => deleteGroup(group.id)}
                     disabled={saving}
-                    className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600"
+                    className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 disabled:opacity-50"
                   >
                     Delete
                   </button>
@@ -713,7 +819,9 @@ export default function ProductCustomizationsPage() {
                     onClick={() => toggleExpanded(group.id)}
                     className="rounded-lg bg-[#F8F3ED] px-3 py-2 text-sm text-[#754426]"
                   >
-                    {expandedGroups.includes(group.id) ? "Hide" : "Manage Options"}
+                    {expandedGroups.includes(group.id)
+                      ? "Hide Options"
+                      : "Manage Options"}
                   </button>
                 </div>
               </div>
@@ -730,10 +838,8 @@ export default function ProductCustomizationsPage() {
                         setOptionGroupId(
                           optionGroupId === group.id ? null : group.id
                         );
-                        setOptionForm({
-                          name: "",
-                          priceAdjustment: "0",
-                        });
+                        setOptionForm(initialOptionForm);
+                        setError("");
                       }}
                       className="rounded-lg bg-[#754426] px-4 py-2 text-sm font-medium text-white"
                     >
@@ -748,6 +854,7 @@ export default function ProductCustomizationsPage() {
                     >
                       <input
                         required
+                        maxLength={100}
                         value={optionForm.name}
                         onChange={(e) =>
                           setOptionForm({
@@ -780,7 +887,7 @@ export default function ProductCustomizationsPage() {
                         disabled={saving}
                         className="rounded-lg bg-[#754426] px-4 py-2 text-sm text-white disabled:opacity-50"
                       >
-                        {saving ? "Saving..." : "Save"}
+                        {saving ? "Saving..." : "Save Option"}
                       </button>
                     </form>
                   )}
@@ -803,6 +910,7 @@ export default function ProductCustomizationsPage() {
                             >
                               <input
                                 required
+                                maxLength={100}
                                 value={editOptionForm.name}
                                 onChange={(e) =>
                                   setEditOptionForm({
@@ -814,6 +922,7 @@ export default function ProductCustomizationsPage() {
                               />
 
                               <input
+                                required
                                 type="number"
                                 min="0"
                                 step="0.01"
@@ -829,7 +938,7 @@ export default function ProductCustomizationsPage() {
 
                               <button
                                 disabled={saving}
-                                className="rounded-lg bg-[#754426] px-4 py-2 text-sm text-white"
+                                className="rounded-lg bg-[#754426] px-4 py-2 text-sm text-white disabled:opacity-50"
                               >
                                 Save
                               </button>
@@ -849,8 +958,8 @@ export default function ProductCustomizationsPage() {
                                   {option.name}
                                 </p>
                                 <p className="mt-1 text-sm font-semibold text-[#754426]">
-                                  {option.priceAdjustment > 0
-                                    ? `+₹${option.priceAdjustment.toFixed(2)}`
+                                  {Number(option.priceAdjustment) > 0
+                                    ? `+₹${Number(option.priceAdjustment).toFixed(2)}`
                                     : "No additional charge"}
                                 </p>
                               </div>
@@ -863,12 +972,15 @@ export default function ProductCustomizationsPage() {
                                       : "bg-gray-100 text-gray-600"
                                   }`}
                                 >
-                                  {option.isAvailable ? "Available" : "Unavailable"}
+                                  {option.isAvailable
+                                    ? "Available"
+                                    : "Unavailable"}
                                 </span>
 
                                 <button
                                   onClick={() => startEditOption(option)}
-                                  className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs text-[#754426]"
+                                  disabled={saving}
+                                  className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs text-[#754426] disabled:opacity-50"
                                 >
                                   Edit
                                 </button>
@@ -876,7 +988,7 @@ export default function ProductCustomizationsPage() {
                                 <button
                                   onClick={() => toggleOption(option)}
                                   disabled={saving}
-                                  className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs text-[#754426]"
+                                  className="rounded-lg border border-[#EADED4] px-3 py-2 text-xs text-[#754426] disabled:opacity-50"
                                 >
                                   {option.isAvailable ? "Disable" : "Enable"}
                                 </button>
@@ -884,7 +996,7 @@ export default function ProductCustomizationsPage() {
                                 <button
                                   onClick={() => deleteOption(option.id)}
                                   disabled={saving}
-                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600"
+                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 disabled:opacity-50"
                                 >
                                   Delete
                                 </button>

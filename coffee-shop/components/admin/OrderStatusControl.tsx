@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw, Check } from "lucide-react";
 
 type Props = {
@@ -25,6 +26,8 @@ export default function OrderStatusControl({
   currentStatus,
   onUpdated,
 }: Props) {
+  const router = useRouter();
+
   const [status, setStatus] = useState(currentStatus);
   const [selected, setSelected] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,6 +38,14 @@ export default function OrderStatusControl({
 
   async function updateStatus() {
     if (!selected || loading) return;
+
+    if (selected === "CANCELLED") {
+      const confirmed = window.confirm(
+        "Are you sure you want to cancel this order? This action cannot be undone."
+      );
+
+      if (!confirmed) return;
+    }
 
     try {
       setLoading(true);
@@ -48,23 +59,34 @@ export default function OrderStatusControl({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ status: selected }),
+          body: JSON.stringify({
+            status: selected,
+          }),
         }
       );
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || "Status update failed.");
+        throw new Error(
+          result.message || "Status update failed."
+        );
       }
 
-      setStatus(result.order.status);
+      const updatedStatus = result.order.status;
+
+      setStatus(updatedStatus);
       setSelected("");
       setMessage("Order status updated successfully.");
-      onUpdated?.(result.order.status);
+
+      onUpdated?.(updatedStatus);
+
+      router.refresh();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Something went wrong."
+        err instanceof Error
+          ? err.message
+          : "Something went wrong."
       );
     } finally {
       setLoading(false);
@@ -85,7 +107,11 @@ export default function OrderStatusControl({
         <div className="mt-4 flex flex-col gap-3">
           <select
             value={selected}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(event) => {
+              setSelected(event.target.value);
+              setError("");
+              setMessage("");
+            }}
             disabled={loading}
             className="w-full rounded-xl border border-[#EADED4] bg-[#F8F3ED] px-4 py-3 text-sm text-[#2B1B14] outline-none focus:border-[#754426] disabled:opacity-60"
           >
@@ -98,6 +124,12 @@ export default function OrderStatusControl({
             ))}
           </select>
 
+          {selected === "CANCELLED" && (
+            <p className="rounded-lg bg-red-50 p-3 text-xs text-red-700">
+              Cancellation of paid online orders requires a completed refund.
+            </p>
+          )}
+
           <button
             type="button"
             onClick={updateStatus}
@@ -109,6 +141,7 @@ export default function OrderStatusControl({
             ) : (
               <Check size={16} />
             )}
+
             {loading ? "Updating..." : "Update Status"}
           </button>
         </div>

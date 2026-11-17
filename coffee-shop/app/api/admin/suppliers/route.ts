@@ -5,40 +5,50 @@ import { getcurrentuser } from "@/app/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// ==========================================
-// ADMIN AUTHORIZATION
-// ==========================================
+function errorResponse(message: string, status = 400) {
+  return NextResponse.json(
+    { success: false, message },
+    { status }
+  );
+}
 
 async function authorizeAdmin() {
   const user = await getcurrentuser();
 
-  if (!user) {
+  if (!user?.id) {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Please login first." },
-        { status: 401 }
-      ),
+      response: errorResponse("Please login first.", 401),
     };
   }
 
   if (user.role !== "ADMIN") {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Admin access required." },
-        { status: 403 }
-      ),
+      response: errorResponse("Admin access required.", 403),
     };
   }
 
   return { authorized: true as const };
 }
 
-// ==========================================
-// GET: SUPPLIER LIST
-// ==========================================
+function optionalString(
+  value: unknown,
+  field: string,
+  maxLength = 500
+): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
 
+  if (typeof value !== "string" || value.length > maxLength) {
+    throw new Error(`INVALID_FIELD:${field}`);
+  }
+
+  return value.trim() || null;
+}
+
+// GET: Supplier List
 export async function GET(request: NextRequest) {
   try {
     const auth = await authorizeAdmin();
@@ -47,16 +57,17 @@ export async function GET(request: NextRequest) {
       return auth.response;
     }
 
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
 
-    const search = searchParams.get("search")?.trim();
+    const search = searchParams.get("search")?.trim() || "";
     const status = searchParams.get("status") || "ALL";
 
     if (!["ALL", "ACTIVE", "INACTIVE"].includes(status)) {
-      return NextResponse.json(
-        { success: false, message: "Invalid supplier status." },
-        { status: 400 }
-      );
+      return errorResponse("Invalid supplier status.");
+    }
+
+    if (search.length > 200) {
+      return errorResponse("Search cannot exceed 200 characters.");
     }
 
     const suppliers = await prisma.supplier.findMany({
@@ -100,9 +111,10 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: [
+        { createdAt: "desc" },
+        { id: "desc" },
+      ],
     });
 
     const totalSuppliers = suppliers.length;
@@ -122,17 +134,11 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Suppliers GET error:", error);
 
-    return NextResponse.json(
-      { success: false, message: "Failed to fetch suppliers." },
-      { status: 500 }
-    );
+    return errorResponse("Failed to fetch suppliers.", 500);
   }
 }
 
-// ==========================================
-// POST: CREATE SUPPLIER
-// ==========================================
-
+// POST: Create Supplier
 export async function POST(request: NextRequest) {
   try {
     const auth = await authorizeAdmin();
@@ -141,115 +147,109 @@ export async function POST(request: NextRequest) {
       return auth.response;
     }
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
 
-    const {
-      name,
-      contactPerson,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      pincode,
-      notes,
-    } = body;
+    try {
+      const parsed: unknown = await request.json();
 
-    // Required field
-    if (
-      typeof name !== "string" ||
-      !name.trim() ||
-      name.trim().length > 150
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Supplier name is required (maximum 150 characters).",
-        },
-        { status: 400 }
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        return errorResponse("Invalid request body.");
+      }
+
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return errorResponse("Invalid JSON request body.");
+    }
+
+    const name =
+      typeof body.name === "string" ? body.name.trim() : "";
+
+    if (!name || name.length > 150) {
+      return errorResponse(
+        "Supplier name is required (maximum 150 characters)."
       );
     }
 
-    // Optional string validation
-    const optionalFields = {
-      contactPerson,
-      email,
-      phone,
-      address,
-      city,
-      state,
-      pincode,
-      notes,
-    };
+    let contactPerson: string | null;
+    let email: string | null;
+    let phone: string | null;
+    let address: string | null;
+    let city: string | null;
+    let state: string | null;
+    let pincode: string | null;
+    let notes: string | null;
 
-    for (const [field, value] of Object.entries(optionalFields)) {
-      if (
-        value !== undefined &&
-        value !== null &&
-        (typeof value !== "string" || value.length > 500)
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: `Invalid ${field} value.`,
-          },
-          { status: 400 }
+    try {
+      contactPerson = optionalString(
+        body.contactPerson,
+        "contact person",
+        150
+      );
+
+      email = optionalString(body.email, "email", 254);
+      phone = optionalString(body.phone, "phone", 30);
+      address = optionalString(body.address, "address", 500);
+      city = optionalString(body.city, "city", 100);
+      state = optionalString(body.state, "state", 100);
+      pincode = optionalString(body.pincode, "pincode", 20);
+      notes = optionalString(body.notes, "notes", 1000);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "";
+
+      if (message.startsWith("INVALID_FIELD:")) {
+        return errorResponse(
+          `Invalid ${message.split(":")[1]} value.`
         );
       }
+
+      throw error;
     }
 
-    const cleanEmail =
-      typeof email === "string" && email.trim()
-        ? email.trim().toLowerCase()
-        : null;
+    const cleanEmail = email?.toLowerCase() ?? null;
 
     if (
       cleanEmail &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
     ) {
-      return NextResponse.json(
-        { success: false, message: "Invalid email address." },
-        { status: 400 }
-      );
+      return errorResponse("Invalid email address.");
     }
 
-    const cleanPhone =
-      typeof phone === "string" && phone.trim()
-        ? phone.trim()
-        : null;
-
-    // Check duplicate supplier name
+    // Check duplicate supplier name.
     const existingSupplier = await prisma.supplier.findFirst({
       where: {
         name: {
-          equals: name.trim(),
+          equals: name,
           mode: "insensitive",
         },
       },
-      select: { id: true },
+      select: {
+        id: true,
+      },
     });
 
     if (existingSupplier) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "A supplier with this name already exists.",
-        },
-        { status: 409 }
+      return errorResponse(
+        "A supplier with this name already exists.",
+        409
       );
     }
 
     const supplier = await prisma.supplier.create({
       data: {
-        name: name.trim(),
-        contactPerson: contactPerson?.trim() || null,
+        name,
+        contactPerson,
         email: cleanEmail,
-        phone: cleanPhone,
-        address: address?.trim() || null,
-        city: city?.trim() || null,
-        state: state?.trim() || null,
-        pincode: pincode?.trim() || null,
-        notes: notes?.trim() || null,
+        phone,
+        address,
+        city,
+        state,
+        pincode,
+        notes,
       },
     });
 
@@ -264,9 +264,18 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Suppliers POST error:", error);
 
-    return NextResponse.json(
-      { success: false, message: "Failed to create supplier." },
-      { status: 500 }
-    );
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return errorResponse(
+        "A supplier with these unique details already exists.",
+        409
+      );
+    }
+
+    return errorResponse("Failed to create supplier.", 500);
   }
 }

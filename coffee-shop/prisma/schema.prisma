@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 // ==========================================
@@ -91,6 +92,149 @@ enum CustomizationSelectionType {
   MULTIPLE
 }
 
+enum StaffRole {
+  STAFF
+  BARISTA
+  CASHIER
+  KITCHEN
+  MANAGER
+  HR
+  DELIVERY
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+  WEEKLY_OFF
+}
+
+enum ShiftAssignmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  MISSED
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  EARNED
+  UNPAID
+  MATERNITY
+  PATERNITY
+  EMERGENCY
+  OTHER
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum HolidayType {
+  PUBLIC
+  NATIONAL
+  FESTIVAL
+  COMPANY
+  OPTIONAL
+}
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum BreakType {
+  TEA
+  LUNCH
+  PERSONAL
+  OTHER
+}
+
+enum PayrollStatus {
+  DRAFT
+  PROCESSING
+  APPROVED
+  PAID
+  PARTIALLY_PAID
+  CANCELLED
+}
+
+enum PayrollItemType {
+  ALLOWANCE
+  DEDUCTION
+  BONUS
+  INCENTIVE
+  OVERTIME
+  OTHER
+}
+
+enum PerformanceRating {
+  POOR
+  BELOW_EXPECTATION
+  MEETS_EXPECTATION
+  GOOD
+  EXCELLENT
+}
+
+enum StaffDocumentType {
+  ID_PROOF
+  ADDRESS_PROOF
+  RESUME
+  OFFER_LETTER
+  JOINING_LETTER
+  CONTRACT
+  CERTIFICATE
+  OTHER
+}
+
+enum StaffNotificationType {
+  ATTENDANCE
+  LEAVE
+  SHIFT
+  PAYROLL
+  DOCUMENT
+  PERFORMANCE
+  SYSTEM
+}
+
+enum StaffPermission {
+  VIEW_STAFF
+  CREATE_STAFF
+  UPDATE_STAFF
+  DELETE_STAFF
+  VIEW_ATTENDANCE
+  MANAGE_ATTENDANCE
+  VIEW_SHIFTS
+  MANAGE_SHIFTS
+  VIEW_LEAVES
+  MANAGE_LEAVES
+  VIEW_PAYROLL
+  MANAGE_PAYROLL
+  VIEW_DOCUMENTS
+  MANAGE_DOCUMENTS
+  VIEW_PERFORMANCE
+  MANAGE_PERFORMANCE
+  VIEW_REPORTS
+  MANAGE_SETTINGS
+  VIEW_AUDIT_LOGS
+}
+
 // ==========================================
 // USER
 // ==========================================
@@ -123,9 +267,10 @@ model User {
   recentlyViewed      RecentlyViewed[]
   searchHistory       SearchHistory[]
   stockMovements      StockMovement[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  reservations        Reservation[]
+  staffAuditLogs      StaffAuditLog[]      @relation("StaffAuditActorUser")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([phone])
 }
@@ -148,6 +293,14 @@ model Category {
   updatedAt DateTime @updatedAt
 
   @@index([isActive])
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
 }
 
 // ==========================================
@@ -213,17 +366,18 @@ model Order {
   deliveryFee    Float     @default(0)
   scheduledFor   DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   // Stock tracking
-  stockDeducted Boolean @default(false)
+  stockDeducted Boolean  @default(false)
 
   // Refund tracking
-  refundId       String?
-  refundAmount   Float?
-  refundStatus   String  @default("NOT_REQUESTED")
-  refundReason   String?
-  refundedAt     DateTime?
+  refundId     String?
+  refundAmount Float?
+  refundStatus String    @default("NOT_REQUESTED")
+  refundReason String?
+  refundedAt   DateTime?
+
   @@index([userId])
   @@index([status])
   @@index([createdAt])
@@ -735,4 +889,636 @@ model PaymentWebhookEvent {
 
   @@index([event])
   @@index([status])
+}
+
+model Reservation {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  reservationNumber String @unique
+
+  guestName  String
+  guestEmail String?
+  guestPhone String
+
+  partySize       Int
+  reservationDate DateTime
+
+  specialRequest String?
+
+  status ReservationStatus @default(PENDING)
+
+  adminNotes String?
+
+  confirmedAt DateTime?
+  cancelledAt DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([reservationDate])
+  @@index([reservationDate, status])
+}
+
+// ==========================================
+// BRANCH
+// ==========================================
+
+// ==========================================
+// BRANCH
+// ==========================================
+
+model Branch {
+  id       String  @id @default(cuid())
+  name     String
+  code     String  @unique
+  address  String?
+  city     String?
+  state    String?
+  phone    String?
+  email    String?
+  isActive Boolean @default(true)
+
+  staff      Staff[]
+  shifts     StaffShift[]
+  holidays   StaffHoliday[]
+  weeklyOffs StaffWeeklyOff[]
+  settings   ShopAttendanceSettings?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([isActive])
+}
+
+// ==========================================
+// STAFF
+// ==========================================
+
+model Staff {
+  id           String  @id @default(cuid())
+  name         String
+  email        String? @unique
+  passwordHash String?
+  phone        String
+  image        String?
+
+  designation    String
+  department     String?
+  employmentType EmploymentType @default(FULL_TIME)
+  role           StaffRole      @default(STAFF)
+
+  loginEnabled Boolean @default(false)
+  isActive     Boolean @default(true)
+
+  joiningDate DateTime  @default(now())
+  leavingDate DateTime?
+
+  baseSalary Float   @default(0)
+  address    String?
+  notes      String?
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  attendances        StaffAttendance[]
+  shiftAssignments   StaffShiftAssignment[]
+  leaveRequests      StaffLeaveRequest[]      @relation("StaffLeaves")
+  reviewedLeaves     StaffLeaveRequest[]      @relation("LeaveApprover")
+  overtimeRecords    StaffOvertime[]
+  approvedOvertime   StaffOvertime[]          @relation("OvertimeApprover")
+  breaks             StaffBreak[]
+  payrolls           StaffPayroll[]
+  performanceReviews StaffPerformanceReview[] @relation("ReviewSubject")
+  givenReviews       StaffPerformanceReview[] @relation("ReviewAuthor")
+  documents          StaffDocument[]
+  notifications      StaffNotification[]
+  auditLogs          StaffAuditLog[]          @relation("AuditTarget")
+  performedAuditLogs StaffAuditLog[]          @relation("AuditActor")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([department])
+  @@index([designation])
+  @@index([role])
+  @@index([branchId])
+  @@index([isActive])
+  @@index([joiningDate])
+}
+
+// ==========================================
+// STAFF ROLE PERMISSIONS
+// ==========================================
+
+model StaffRolePermission {
+  id         String          @id @default(cuid())
+  role       StaffRole
+  permission StaffPermission
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([role, permission])
+  @@index([role])
+}
+
+// ==========================================
+// SHOP ATTENDANCE SETTINGS
+// ==========================================
+
+model ShopAttendanceSettings {
+  id                 String @id @default("default")
+  timezone           String @default("Asia/Kolkata")
+  openingTime        String @default("09:00")
+  closingTime        String @default("21:00")
+  gracePeriodMinutes Int    @default(10)
+
+  // Default shift and attendance rules
+  halfDayHours    Float   @default(4)
+  fullDayHours    Float   @default(8)
+  overtimeEnabled Boolean @default(true)
+  autoMarkAbsent  Boolean @default(false)
+
+  branchId String? @unique
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+
+  @@index([timezone])
+}
+
+// ==========================================
+// STAFF ATTENDANCE
+// ==========================================
+
+model StaffAttendance {
+  id      String @id @default(cuid())
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  date     DateTime
+  checkIn  DateTime?
+  checkOut DateTime?
+
+  status AttendanceStatus @default(PRESENT)
+
+  workingMinutes  Int @default(0)
+  breakMinutes    Int @default(0)
+  overtimeMinutes Int @default(0)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  breaks   StaffBreak[]
+  overtime StaffOvertime[]
+
+  @@unique([staffId, date])
+  @@index([date])
+  @@index([staffId])
+  @@index([status])
+  @@index([date, status])
+}
+
+// ==========================================
+// STAFF SHIFT
+// ==========================================
+
+model StaffShift {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  startTime String
+  endTime   String
+
+  breakDurationMinutes Int @default(30)
+  gracePeriodMinutes   Int @default(10)
+
+  isOvernight Boolean @default(false)
+  isActive    Boolean @default(true)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  assignments StaffShiftAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([isActive])
+}
+
+// ==========================================
+// STAFF SHIFT ASSIGNMENT
+// ==========================================
+
+model StaffShiftAssignment {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  shiftId String
+  shift   StaffShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  date   DateTime
+  status ShiftAssignmentStatus @default(SCHEDULED)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([staffId, date])
+  @@index([shiftId])
+  @@index([date])
+  @@index([status])
+}
+
+// ==========================================
+// STAFF LEAVE REQUEST
+// ==========================================
+
+model StaffLeaveRequest {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation("StaffLeaves", fields: [staffId], references: [id], onDelete: Cascade)
+
+  leaveType LeaveType
+  startDate DateTime
+  endDate   DateTime
+
+  totalDays Float
+
+  reason String?
+
+  status LeaveRequestStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedBy   Staff?  @relation("LeaveApprover", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  reviewNote String?
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+// ==========================================
+// STAFF HOLIDAYS
+// ==========================================
+
+model StaffHoliday {
+  id          String      @id @default(cuid())
+  name        String
+  date        DateTime
+  description String?
+  type        HolidayType @default(PUBLIC)
+  isActive    Boolean     @default(true)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([branchId])
+  @@index([isActive])
+}
+
+// ==========================================
+// STAFF WEEKLY OFF
+// ==========================================
+
+model StaffWeeklyOff {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  isActive  Boolean @default(true)
+
+  // Optional: apply to one staff member
+  staffId String?
+
+  // Optional: apply to a whole branch
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([branchId])
+  @@index([dayOfWeek])
+}
+
+// ==========================================
+// STAFF OVERTIME
+// ==========================================
+
+model StaffOvertime {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  attendanceId String?
+  attendance   StaffAttendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  date       DateTime
+  minutes    Int
+  hourlyRate Float    @default(0)
+  amount     Float    @default(0)
+
+  status OvertimeStatus @default(PENDING)
+
+  approvedById String?
+  approvedBy   Staff?  @relation("OvertimeApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([date])
+  @@index([status])
+}
+
+// ==========================================
+// STAFF BREAK
+// ==========================================
+
+model StaffBreak {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  attendanceId String?
+  attendance   StaffAttendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+
+  type BreakType @default(LUNCH)
+
+  startAt DateTime
+  endAt   DateTime?
+
+  durationMinutes Int     @default(0)
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([attendanceId])
+  @@index([startAt])
+}
+
+// ==========================================
+// STAFF PAYROLL
+// ==========================================
+
+model StaffPayroll {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  payrollNumber String @unique
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  basicSalary    Float @default(0)
+  allowances     Float @default(0)
+  deductions     Float @default(0)
+  overtimeAmount Float @default(0)
+  bonus          Float @default(0)
+
+  grossSalary Float @default(0)
+  netSalary   Float @default(0)
+  paidAmount  Float @default(0)
+
+  workingDays   Int   @default(0)
+  presentDays   Float @default(0)
+  absentDays    Float @default(0)
+  leaveDays     Float @default(0)
+  overtimeHours Float @default(0)
+
+  status PayrollStatus @default(DRAFT)
+
+  paymentDate      DateTime?
+  paymentReference String?
+  paymentMethod    String?
+  notes            String?
+
+  items StaffPayrollItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([staffId, periodStart])
+  @@index([periodStart, periodEnd])
+  @@index([status])
+  @@index([staffId])
+}
+
+// ==========================================
+// STAFF PAYROLL ITEMS
+// ==========================================
+
+model StaffPayrollItem {
+  id String @id @default(cuid())
+
+  payrollId String
+  payroll   StaffPayroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+
+  type        PayrollItemType
+  title       String
+  description String?
+  amount      Float
+
+  createdAt DateTime @default(now())
+
+  @@index([payrollId])
+  @@index([type])
+}
+
+// ==========================================
+// STAFF PERFORMANCE REVIEW
+// ==========================================
+
+model StaffPerformanceReview {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation("ReviewSubject", fields: [staffId], references: [id], onDelete: Cascade)
+
+  reviewerId String?
+  reviewer   Staff?  @relation("ReviewAuthor", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  rating PerformanceRating
+
+  reviewDate     DateTime  @default(now())
+  nextReviewDate DateTime?
+
+  strengths    String?
+  improvements String?
+  comments     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([reviewerId])
+  @@index([reviewDate])
+}
+
+// ==========================================
+// STAFF DOCUMENTS
+// ==========================================
+
+model StaffDocument {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        StaffDocumentType @default(OTHER)
+  fileUrl     String
+  mimeType    String?
+  sizeBytes   Int?
+  expiryDate  DateTime?
+  description String?
+
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+ cloudinaryPublicId     String?
+  cloudinaryResourceType String?
+  @@index([staffId])
+  @@index([type])
+  @@index([expiryDate])
+}
+
+// ==========================================
+// STAFF NOTIFICATIONS
+// ==========================================
+
+model StaffNotification {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  type    StaffNotificationType @default(SYSTEM)
+  title   String
+  message String
+  isRead  Boolean               @default(false)
+
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([staffId])
+  @@index([staffId, isRead])
+  @@index([createdAt])
+}
+
+// ==========================================
+// STAFF AUDIT LOGS
+// ==========================================
+
+model StaffAuditLog {
+  id String @id @default(cuid())
+
+  // Staff record affected by the action
+  staffId String?
+  staff   Staff?  @relation("AuditTarget", fields: [staffId], references: [id], onDelete: SetNull)
+
+  // Admin/User who performed the action
+  actorUserId String?
+  actorUser   User?   @relation("StaffAuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  // Staff member who performed the action
+  actorStaffId String?
+  actorStaff   Staff?  @relation("AuditActor", fields: [actorStaffId], references: [id], onDelete: SetNull)
+
+  action      String
+  entity      String
+  entityId    String?
+  description String?
+
+  oldValues Json?
+  newValues Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([staffId])
+  @@index([actorUserId])
+  @@index([actorStaffId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model ShopSettings {
+  id String @id @default("default")
+
+  // General Information
+  shopName   String  @default("BrewBites")
+  tagline    String?
+  logo       String?
+  email      String?
+  phone      String?
+  address    String?
+  city       String?
+  state      String?
+  postalCode String?
+  country    String  @default("India")
+
+  // Business Settings
+  currency      String @default("INR")
+  timezone      String @default("Asia/Kolkata")
+  openingTime   String @default("09:00")
+  closingTime   String @default("21:00")
+  taxPercentage Float  @default(0)
+
+  // Order Settings
+  minimumOrderAmount Float  @default(0)
+  deliveryFee        Float  @default(0)
+  freeDeliveryAbove  Float?
+
+  // Order Preferences
+  acceptOrders         Boolean @default(true)
+  allowScheduledOrders Boolean @default(true)
+
+  // Notification Preferences
+  emailNotifications    Boolean @default(true)
+  orderNotifications    Boolean @default(true)
+  paymentNotifications  Boolean @default(true)
+  lowStockNotifications Boolean @default(true)
+
+  // System
+  maintenanceMode Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

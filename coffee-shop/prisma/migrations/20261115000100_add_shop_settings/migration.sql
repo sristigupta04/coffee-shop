@@ -1,0 +1,33 @@
+-- CreateTable
+CREATE TABLE "ShopSettings" (
+    "id" TEXT NOT NULL DEFAULT 'default',
+    "shopName" TEXT NOT NULL DEFAULT 'BrewBites',
+    "tagline" TEXT,
+    "logo" TEXT,
+    "email" TEXT,
+    "phone" TEXT,
+    "address" TEXT,
+    "city" TEXT,
+    "state" TEXT,
+    "postalCode" TEXT,
+    "country" TEXT NOT NULL DEFAULT 'India',
+    "currency" TEXT NOT NULL DEFAULT 'INR',
+    "timezone" TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+    "openingTime" TEXT NOT NULL DEFAULT '09:00',
+    "closingTime" TEXT NOT NULL DEFAULT '21:00',
+    "taxPercentage" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "minimumOrderAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "deliveryFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "freeDeliveryAbove" DOUBLE PRECISION,
+    "acceptOrders" BOOLEAN NOT NULL DEFAULT true,
+    "allowScheduledOrders" BOOLEAN NOT NULL DEFAULT true,
+    "emailNotifications" BOOLEAN NOT NULL DEFAULT true,
+    "orderNotifications" BOOLEAN NOT NULL DEFAULT true,
+    "paymentNotifications" BOOLEAN NOT NULL DEFAULT true,
+    "lowStockNotifications" BOOLEAN NOT NULL DEFAULT true,
+    "maintenanceMode" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ShopSettings_pkey" PRIMARY KEY ("id")
+);

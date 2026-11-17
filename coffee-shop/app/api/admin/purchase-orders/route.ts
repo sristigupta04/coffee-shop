@@ -7,40 +7,52 @@ import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// ==========================================
-// ADMIN AUTHORIZATION
-// ==========================================
+const VALID_STATUSES = [
+  "DRAFT",
+  "ORDERED",
+  "PARTIALLY_RECEIVED",
+  "RECEIVED",
+  "CANCELLED",
+] as const;
+
+type PurchaseOrderStatus = (typeof VALID_STATUSES)[number];
+
+type PurchaseOrderInputItem = {
+  productId: string;
+  orderedQuantity: number;
+  unitCost: number;
+};
+
+const MAX_AMOUNT = 9_000_000_000_000;
+
+function errorResponse(message: string, status = 400) {
+  return NextResponse.json(
+    { success: false, message },
+    { status }
+  );
+}
 
 async function authorizeAdmin() {
   const user = await getcurrentuser();
 
-  if (!user) {
+  if (!user?.id) {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Please login first." },
-        { status: 401 }
-      ),
+      response: errorResponse("Please login first.", 401),
     };
   }
 
   if (user.role !== "ADMIN") {
     return {
       authorized: false as const,
-      response: NextResponse.json(
-        { success: false, message: "Admin access required." },
-        { status: 403 }
-      ),
+      response: errorResponse("Admin access required.", 403),
     };
   }
 
   return { authorized: true as const };
 }
 
-// ==========================================
-// GET: PURCHASE ORDER LIST
-// ==========================================
-
+// GET: Purchase Order List
 export async function GET(request: NextRequest) {
   try {
     const auth = await authorizeAdmin();
@@ -49,56 +61,62 @@ export async function GET(request: NextRequest) {
       return auth.response;
     }
 
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
 
-    // Pagination
-    const page = Math.max(
-      1,
-      Number(searchParams.get("page")) || 1
-    );
+    const rawPage = searchParams.get("page");
+    const rawLimit = searchParams.get("limit");
 
-    const limit = Math.min(
-      100,
-      Math.max(1, Number(searchParams.get("limit")) || 20)
-    );
+    const page = rawPage === null ? 1 : Number(rawPage);
+    const limit = rawLimit === null ? 20 : Number(rawLimit);
 
-    // Filters
-    const status = searchParams.get("status");
-    const supplierId = searchParams.get("supplierId");
-    const search = searchParams.get("search")?.trim();
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      page > 1_000_000
+    ) {
+      return errorResponse("Invalid page number.");
+    }
 
-    const validStatuses = [
-      "DRAFT",
-      "ORDERED",
-      "PARTIALLY_RECEIVED",
-      "RECEIVED",
-      "CANCELLED",
-    ];
-
-    if (status && !validStatuses.includes(status)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid purchase order status.",
-        },
-        { status: 400 }
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      return errorResponse(
+        "Limit must be between 1 and 100."
       );
     }
 
+    const rawStatus = searchParams.get("status");
+    const supplierId = searchParams.get("supplierId")?.trim();
+    const search = searchParams.get("search")?.trim();
+
+    if (
+      rawStatus &&
+      rawStatus !== "ALL" &&
+      !VALID_STATUSES.includes(rawStatus as PurchaseOrderStatus)
+    ) {
+      return errorResponse("Invalid purchase order status.");
+    }
+
+    if (search && search.length > 200) {
+      return errorResponse(
+        "Search cannot exceed 200 characters."
+      );
+    }
+
+    if (supplierId && supplierId.length > 191) {
+      return errorResponse("Invalid supplier ID.");
+    }
+
+    const status =
+      rawStatus && rawStatus !== "ALL"
+        ? (rawStatus as PurchaseOrderStatus)
+        : undefined;
+
     const where: Prisma.PurchaseOrderWhereInput = {
-      ...(status
-        ? {
-            status: status as
-              | "DRAFT"
-              | "ORDERED"
-              | "PARTIALLY_RECEIVED"
-              | "RECEIVED"
-              | "CANCELLED",
-          }
-        : {}),
-
+      ...(status ? { status } : {}),
       ...(supplierId ? { supplierId } : {}),
-
       ...(search
         ? {
             OR: [
@@ -121,13 +139,8 @@ export async function GET(request: NextRequest) {
         : {}),
     };
 
-    // ==========================================
-    // FETCH PURCHASE ORDERS, COUNT AND SUMMARY
-    // ==========================================
-
     const [purchaseOrders, totalRecords, statusCounts] =
       await prisma.$transaction([
-        // Purchase order list
         prisma.purchaseOrder.findMany({
           where,
           include: {
@@ -145,17 +158,16 @@ export async function GET(request: NextRequest) {
               },
             },
           },
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: [
+            { createdAt: "desc" },
+            { id: "desc" },
+          ],
           skip: (page - 1) * limit,
           take: limit,
         }),
 
-        // Total records matching filters
         prisma.purchaseOrder.count({ where }),
 
-        // All orders for overall summary
         prisma.purchaseOrder.findMany({
           select: {
             status: true,
@@ -163,10 +175,6 @@ export async function GET(request: NextRequest) {
           },
         }),
       ]);
-
-    // ==========================================
-    // SUMMARY
-    // ==========================================
 
     const summary = {
       total: 0,
@@ -184,30 +192,24 @@ export async function GET(request: NextRequest) {
 
       switch (item.status) {
         case "DRAFT":
-          summary.draft += 1;
+          summary.draft++;
           break;
-
         case "ORDERED":
-          summary.ordered += 1;
+          summary.ordered++;
           break;
-
         case "PARTIALLY_RECEIVED":
-          summary.partiallyReceived += 1;
+          summary.partiallyReceived++;
           break;
-
         case "RECEIVED":
-          summary.received += 1;
+          summary.received++;
           break;
-
         case "CANCELLED":
-          summary.cancelled += 1;
+          summary.cancelled++;
           break;
       }
     }
 
-    // ==========================================
-    // SUCCESS RESPONSE
-    // ==========================================
+    const totalPages = Math.ceil(totalRecords / limit);
 
     return NextResponse.json({
       success: true,
@@ -217,28 +219,18 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         totalRecords,
-        totalPages: Math.ceil(totalRecords / limit),
-        hasNextPage: page * limit < totalRecords,
+        totalPages,
+        hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
       },
     });
   } catch (error) {
     console.error("Purchase orders GET error:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to fetch purchase orders.",
-      },
-      { status: 500 }
-    );
+    return errorResponse("Failed to fetch purchase orders.", 500);
   }
 }
 
-// ==========================================
-// POST: CREATE PURCHASE ORDER
-// ==========================================
-
+// POST: Create Purchase Order
 export async function POST(request: NextRequest) {
   try {
     const auth = await authorizeAdmin();
@@ -247,141 +239,134 @@ export async function POST(request: NextRequest) {
       return auth.response;
     }
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
 
-    const {
-      supplierId,
-      items,
-      tax = 0,
-      shippingCost = 0,
-      notes,
-      expectedDate,
-    } = body;
+    try {
+      const parsed: unknown = await request.json();
 
-    // ==========================================
-    // VALIDATE SUPPLIER
-    // ==========================================
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        return errorResponse("Invalid request body.");
+      }
 
-    if (
-      typeof supplierId !== "string" ||
-      !supplierId.trim()
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Supplier is required.",
-        },
-        { status: 400 }
-      );
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return errorResponse("Invalid JSON request body.");
     }
 
-    // ==========================================
-    // VALIDATE ITEMS
-    // ==========================================
+    const supplierId =
+      typeof body.supplierId === "string"
+        ? body.supplierId.trim()
+        : "";
+
+    const items = body.items;
+    const tax = body.tax === undefined ? 0 : body.tax;
+    const shippingCost =
+      body.shippingCost === undefined ? 0 : body.shippingCost;
+    const notes = body.notes;
+    const expectedDate = body.expectedDate;
+
+    if (!supplierId || supplierId.length > 191) {
+      return errorResponse("A valid supplier is required.");
+    }
 
     if (
       !Array.isArray(items) ||
       items.length === 0 ||
       items.length > 100
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Add between 1 and 100 purchase order items.",
-        },
-        { status: 400 }
+      return errorResponse(
+        "Add between 1 and 100 purchase order items."
       );
     }
 
+    const validatedItems: PurchaseOrderInputItem[] = [];
     const productIds = new Set<string>();
 
     for (const item of items) {
       if (
-        !item ||
-        typeof item.productId !== "string" ||
-        !item.productId.trim()
+        typeof item !== "object" ||
+        item === null ||
+        Array.isArray(item)
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid product ID.",
-          },
-          { status: 400 }
-        );
+        return errorResponse("Invalid purchase order item.");
       }
 
-      if (productIds.has(item.productId)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "A product can only appear once in an order.",
-          },
-          { status: 400 }
-        );
+      const productItem = item as Record<string, unknown>;
+
+      const productId =
+        typeof productItem.productId === "string"
+          ? productItem.productId.trim()
+          : "";
+
+      const orderedQuantity = productItem.orderedQuantity;
+      const unitCost = productItem.unitCost;
+
+      if (!productId || productId.length > 191) {
+        return errorResponse("Invalid product ID.");
       }
 
-      productIds.add(item.productId);
-
-      if (
-        !Number.isSafeInteger(item.orderedQuantity) ||
-        item.orderedQuantity <= 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Ordered quantity must be a positive integer.",
-          },
-          { status: 400 }
+      if (productIds.has(productId)) {
+        return errorResponse(
+          "A product can only appear once in an order."
         );
       }
 
       if (
-        typeof item.unitCost !== "number" ||
-        !Number.isFinite(item.unitCost) ||
-        item.unitCost < 0
+        typeof orderedQuantity !== "number" ||
+        !Number.isSafeInteger(orderedQuantity) ||
+        orderedQuantity <= 0 ||
+        orderedQuantity > 2_147_483_647
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Unit cost must be a valid non-negative number.",
-          },
-          { status: 400 }
+        return errorResponse(
+          "Ordered quantity must be a valid positive integer."
         );
       }
 
       if (
-        !Number.isFinite(
-          item.orderedQuantity * item.unitCost
-        )
+        typeof unitCost !== "number" ||
+        !Number.isFinite(unitCost) ||
+        unitCost < 0 ||
+        unitCost > MAX_AMOUNT
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid item total.",
-          },
-          { status: 400 }
+        return errorResponse(
+          "Unit cost must be a valid non-negative number."
         );
       }
+
+      const itemTotal = orderedQuantity * unitCost;
+
+      if (
+        !Number.isFinite(itemTotal) ||
+        itemTotal > MAX_AMOUNT
+      ) {
+        return errorResponse("Invalid item total.");
+      }
+
+      productIds.add(productId);
+
+      validatedItems.push({
+        productId,
+        orderedQuantity,
+        unitCost,
+      });
     }
-
-    // ==========================================
-    // VALIDATE TAX AND SHIPPING
-    // ==========================================
 
     if (
       typeof tax !== "number" ||
       !Number.isFinite(tax) ||
       tax < 0 ||
+      tax > MAX_AMOUNT ||
       typeof shippingCost !== "number" ||
       !Number.isFinite(shippingCost) ||
-      shippingCost < 0
+      shippingCost < 0 ||
+      shippingCost > MAX_AMOUNT
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Tax and shipping cost must be non-negative numbers.",
-        },
-        { status: 400 }
+      return errorResponse(
+        "Tax and shipping cost must be valid non-negative numbers."
       );
     }
 
@@ -390,48 +375,48 @@ export async function POST(request: NextRequest) {
       notes !== null &&
       (typeof notes !== "string" || notes.length > 1000)
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Notes cannot exceed 1000 characters.",
-        },
-        { status: 400 }
+      return errorResponse(
+        "Notes cannot exceed 1000 characters."
       );
     }
 
-    // ==========================================
-    // VALIDATE EXPECTED DATE
-    // ==========================================
-
     let parsedExpectedDate: Date | null = null;
 
-    if (expectedDate !== undefined && expectedDate !== null) {
+    if (
+      expectedDate !== undefined &&
+      expectedDate !== null &&
+      expectedDate !== ""
+    ) {
       if (
         typeof expectedDate !== "string" ||
         !Number.isFinite(Date.parse(expectedDate))
       ) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid expected delivery date.",
-          },
-          { status: 400 }
-        );
+        return errorResponse("Invalid expected delivery date.");
       }
 
       parsedExpectedDate = new Date(expectedDate);
     }
 
-    // ==========================================
-    // DATABASE TRANSACTION
-    // ==========================================
+    const subtotal = validatedItems.reduce(
+      (total, item) =>
+        total + item.orderedQuantity * item.unitCost,
+      0
+    );
+
+    const totalAmount = subtotal + tax + shippingCost;
+
+    if (
+      !Number.isFinite(subtotal) ||
+      !Number.isFinite(totalAmount) ||
+      totalAmount > MAX_AMOUNT
+    ) {
+      return errorResponse("Invalid purchase order total.");
+    }
 
     const purchaseOrder = await prisma.$transaction(
       async (tx) => {
         const supplier = await tx.supplier.findUnique({
-          where: {
-            id: supplierId,
-          },
+          where: { id: supplierId },
           select: {
             id: true,
             name: true,
@@ -449,40 +434,13 @@ export async function POST(request: NextRequest) {
 
         const products = await tx.product.findMany({
           where: {
-            id: {
-              in: [...productIds],
-            },
+            id: { in: [...productIds] },
           },
-          select: {
-            id: true,
-            name: true,
-          },
+          select: { id: true },
         });
 
         if (products.length !== productIds.size) {
           throw new Error("PRODUCT_NOT_FOUND");
-        }
-
-        const subtotal = items.reduce(
-          (
-            total: number,
-            item: {
-              orderedQuantity: number;
-              unitCost: number;
-            }
-          ) =>
-            total +
-            item.orderedQuantity * item.unitCost,
-          0
-        );
-
-        const totalAmount = subtotal + tax + shippingCost;
-
-        if (
-          !Number.isFinite(subtotal) ||
-          !Number.isFinite(totalAmount)
-        ) {
-          throw new Error("INVALID_ORDER_TOTAL");
         }
 
         const orderNumber = `PO-${Date.now()}-${randomUUID()
@@ -492,7 +450,7 @@ export async function POST(request: NextRequest) {
         return tx.purchaseOrder.create({
           data: {
             orderNumber,
-            supplierId,
+            supplierId: supplier.id,
             status: "DRAFT",
             subtotal,
             tax,
@@ -503,22 +461,15 @@ export async function POST(request: NextRequest) {
                 ? notes.trim()
                 : null,
             expectedDate: parsedExpectedDate,
-
             items: {
-              create: items.map(
-                (item: {
-                  productId: string;
-                  orderedQuantity: number;
-                  unitCost: number;
-                }) => ({
-                  productId: item.productId,
-                  orderedQuantity: item.orderedQuantity,
-                  receivedQuantity: 0,
-                  unitCost: item.unitCost,
-                  totalCost:
-                    item.orderedQuantity * item.unitCost,
-                })
-              ),
+              create: validatedItems.map((item) => ({
+                productId: item.productId,
+                orderedQuantity: item.orderedQuantity,
+                receivedQuantity: 0,
+                unitCost: item.unitCost,
+                totalCost:
+                  item.orderedQuantity * item.unitCost,
+              })),
             },
           },
           include: {
@@ -552,53 +503,24 @@ export async function POST(request: NextRequest) {
     console.error("Purchase order POST error:", error);
 
     if (error instanceof Error) {
-      if (error.message === "SUPPLIER_NOT_FOUND") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Supplier not found.",
-          },
-          { status: 404 }
-        );
-      }
+      switch (error.message) {
+        case "SUPPLIER_NOT_FOUND":
+          return errorResponse("Supplier not found.", 404);
 
-      if (error.message === "SUPPLIER_INACTIVE") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "This supplier is inactive.",
-          },
-          { status: 400 }
-        );
-      }
+        case "SUPPLIER_INACTIVE":
+          return errorResponse("This supplier is inactive.");
 
-      if (error.message === "PRODUCT_NOT_FOUND") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "One or more products were not found.",
-          },
-          { status: 404 }
-        );
-      }
-
-      if (error.message === "INVALID_ORDER_TOTAL") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid purchase order total.",
-          },
-          { status: 400 }
-        );
+        case "PRODUCT_NOT_FOUND":
+          return errorResponse(
+            "One or more products were not found.",
+            404
+          );
       }
     }
 
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to create purchase order.",
-      },
-      { status: 500 }
+    return errorResponse(
+      "Failed to create purchase order.",
+      500
     );
   }
 }

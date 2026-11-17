@@ -1,12 +1,9 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
-  ArrowDownRight,
-  ArrowUpRight,
-  Coffee,
   IndianRupee,
   Package,
   ShoppingBag,
@@ -22,9 +19,14 @@ import DataTable, {
 
 type DashboardStats = {
   revenue: number;
-  orders: number;
-  customers: number;
-  products: number;
+  totalOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  newCustomers: number;
+  totalCustomers: number;
+  totalProducts: number;
+  lowStockProducts: number;
 };
 
 type RecentOrder = {
@@ -46,6 +48,32 @@ type DashboardData = {
   summary: DashboardStats;
   recentOrders: RecentOrder[];
   topSellingProducts: TopProduct[];
+};
+
+type AnalyticsResponse = {
+  success: boolean;
+  message?: string;
+  data?: {
+    summary: DashboardStats;
+    recentOrders: {
+      id: string;
+      totalPrice: number;
+      status: string;
+      paymentStatus: string;
+      createdAt: string;
+      user?: {
+        name: string | null;
+        email: string;
+      } | null;
+    }[];
+    topSellingProducts: {
+      id: string;
+      name: string;
+      image: string;
+      quantitySold: number;
+      revenue: number;
+    }[];
+  };
 };
 
 const currency = (amount: number) =>
@@ -75,7 +103,9 @@ const orderColumns: DataTableColumn<RecentOrder>[] = [
     header: "Amount",
     sortable: true,
     render: (order) => (
-      <span className="font-semibold">{currency(order.total)}</span>
+      <span className="font-semibold">
+        {currency(order.total)}
+      </span>
     ),
   },
   {
@@ -120,30 +150,83 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await fetch("/api/admin/analytics?range=7d", {
-        cache: "no-store",
+      // Last 7 days: today and previous 6 days
+      const to = new Date();
+      const from = new Date();
+
+      from.setDate(from.getDate() - 6);
+
+      const formatDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+
+        return `${year}-${month}-${day}`;
+      };
+
+      const params = new URLSearchParams({
+        from: formatDate(from),
+        to: formatDate(to),
       });
 
-      if (!response.ok) {
-        throw new Error("Unable to load dashboard analytics.");
+      const response = await fetch(
+        `/api/admin/analytics?${params.toString()}`,
+        {
+          cache: "no-store",
+        }
+      );
+
+      const result: AnalyticsResponse = await response.json();
+
+      if (!response.ok || !result.success || !result.data) {
+        throw new Error(
+          result.message || "Unable to load dashboard analytics."
+        );
       }
 
-      const result: DashboardData = await response.json();
+      const data = result.data;
 
-      if (
-        !result.summary ||
-        !Array.isArray(result.recentOrders) ||
-        !Array.isArray(result.topSellingProducts)
-      ) {
-        throw new Error("The analytics API returned an invalid response.");
-      }
+      const recentOrders: RecentOrder[] = data.recentOrders.map(
+        (order) => ({
+          id: order.id,
+          customer:
+            order.user?.name ||
+            order.user?.email ||
+            "Guest Customer",
+          total: Number(order.totalPrice) || 0,
+          status: order.status,
+          createdAt: order.createdAt,
+        })
+      );
 
-      setDashboard(result);
+      const topSellingProducts: TopProduct[] =
+        data.topSellingProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          quantity: Number(product.quantitySold) || 0,
+          revenue: Number(product.revenue) || 0,
+        }));
+
+      setDashboard({
+        summary: {
+          revenue: Number(data.summary.revenue) || 0,
+          totalOrders: Number(data.summary.totalOrders) || 0,
+          pendingOrders: Number(data.summary.pendingOrders) || 0,
+          completedOrders: Number(data.summary.completedOrders) || 0,
+          cancelledOrders: Number(data.summary.cancelledOrders) || 0,
+          newCustomers: Number(data.summary.newCustomers) || 0,
+          totalCustomers: Number(data.summary.totalCustomers) || 0,
+          totalProducts: Number(data.summary.totalProducts) || 0,
+          lowStockProducts: Number(data.summary.lowStockProducts) || 0,
+        },
+        recentOrders,
+        topSellingProducts,
+      });
     } catch (err) {
       setError(
         err instanceof Error
@@ -153,22 +236,23 @@ export default function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadDashboard();
-  }, []);
+  }, [loadDashboard]);
 
   const stats = dashboard?.summary;
 
   return (
     <main className="min-h-screen bg-[#F8F3ED] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-7">
+
         {/* Page heading */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-[#A76535]">
-              BREWB​ITES ADMINISTRATION
+              BREWBITES ADMINISTRATION
             </p>
 
             <h1 className="mt-1 text-2xl font-bold text-[#2B1B14] sm:text-3xl">
@@ -212,13 +296,15 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Statistics */}
+        {/* Business summary */}
         <section>
-          <div className="mb-4 flex items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <Activity size={18} className="text-[#754426]" />
+
             <h2 className="font-semibold text-[#2B1B14]">
               Business Summary
             </h2>
+
             <span className="text-xs text-[#A18B7C]">
               Last 7 days
             </span>
@@ -237,7 +323,11 @@ export default function AdminDashboardPage() {
 
             <StatCard
               title="Total Orders"
-              value={stats ? stats.orders.toLocaleString("en-IN") : "—"}
+              value={
+                stats
+                  ? stats.totalOrders.toLocaleString("en-IN")
+                  : "—"
+              }
               icon={ShoppingBag}
               loading={loading}
               description="Orders received"
@@ -246,18 +336,26 @@ export default function AdminDashboardPage() {
             />
 
             <StatCard
-              title="Customers"
-              value={stats ? stats.customers.toLocaleString("en-IN") : "—"}
+              title="Total Customers"
+              value={
+                stats
+                  ? stats.totalCustomers.toLocaleString("en-IN")
+                  : "—"
+              }
               icon={Users}
               loading={loading}
-              description="Registered customers"
+              description="All registered customers"
               iconColor="#16835D"
               iconBackground="#E8F5EE"
             />
 
             <StatCard
               title="Products"
-              value={stats ? stats.products.toLocaleString("en-IN") : "—"}
+              value={
+                stats
+                  ? stats.totalProducts.toLocaleString("en-IN")
+                  : "—"
+              }
               icon={Package}
               loading={loading}
               description="Products in catalogue"
@@ -267,12 +365,50 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
+        {/* Additional order statistics */}
+        <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[
+            {
+              label: "Pending Orders",
+              value: stats?.pendingOrders,
+            },
+            {
+              label: "Completed Orders",
+              value: stats?.completedOrders,
+            },
+            {
+              label: "Cancelled Orders",
+              value: stats?.cancelledOrders,
+            },
+            {
+              label: "Low Stock Products",
+              value: stats?.lowStockProducts,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-[#E9DCCF] bg-white p-4 shadow-sm"
+            >
+              <p className="text-sm text-[#80695B]">
+                {item.label}
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-[#2B1B14]">
+                {loading
+                  ? "—"
+                  : (item.value ?? 0).toLocaleString("en-IN")}
+              </p>
+            </div>
+          ))}
+        </section>
+
         {/* Recent orders */}
         <section className="space-y-4">
           <div>
             <h2 className="text-lg font-bold text-[#2B1B14]">
               Recent Orders
             </h2>
+
             <p className="text-sm text-[#80695B]">
               Latest customer orders and their current status.
             </p>
@@ -296,6 +432,7 @@ export default function AdminDashboardPage() {
             <h2 className="text-lg font-bold text-[#2B1B14]">
               Top Selling Products
             </h2>
+
             <p className="text-sm text-[#80695B]">
               Products ranked by units sold.
             </p>
@@ -309,9 +446,10 @@ export default function AdminDashboardPage() {
             pageSize={5}
             searchable={false}
             emptyTitle="No sales data yet"
-            emptyDescription="Product sales will appear here once orders are completed."
+            emptyDescription="Product sales will appear here once paid orders are received."
           />
         </section>
+
       </div>
     </main>
   );

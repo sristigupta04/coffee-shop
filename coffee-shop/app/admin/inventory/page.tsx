@@ -1,7 +1,25 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  Loader2,
+  Package,
+  RefreshCw,
+  Search,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
 
 type Product = {
   id: string;
@@ -27,6 +45,8 @@ type InventorySummary = {
 };
 
 type StockAction = "ADD" | "REMOVE" | "SET";
+type StockFilter = "ALL" | "IN_STOCK" | "LOW" | "OUT";
+type AvailabilityFilter = "ALL" | "AVAILABLE" | "UNAVAILABLE";
 
 const emptySummary: InventorySummary = {
   totalProducts: 0,
@@ -36,6 +56,18 @@ const emptySummary: InventorySummary = {
   inventoryValue: 0,
   lowStockLimit: 10,
 };
+
+async function readResponse(response: Response) {
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok || !result?.success) {
+    throw new Error(
+      result?.message || "Something went wrong. Please try again."
+    );
+  }
+
+  return result;
+}
 
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -48,16 +80,18 @@ export default function InventoryPage() {
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [stockFilter, setStockFilter] = useState("ALL");
+  const [stockFilter, setStockFilter] = useState<StockFilter>("ALL");
+  const [availabilityFilter, setAvailabilityFilter] =
+    useState<AvailabilityFilter>("ALL");
 
   const [selectedProduct, setSelectedProduct] =
     useState<Product | null>(null);
 
   const [action, setAction] = useState<StockAction>("ADD");
   const [quantity, setQuantity] = useState("1");
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Fetch inventory
   const fetchInventory = useCallback(async () => {
     try {
       setLoading(true);
@@ -67,16 +101,16 @@ export default function InventoryPage() {
         cache: "no-store",
       });
 
-      const result = await response.json();
+      const result = await readResponse(response);
 
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Failed to load inventory."
-        );
-      }
+      setProducts(
+        Array.isArray(result.products) ? result.products : []
+      );
 
-      setProducts(result.products ?? []);
-      setSummary(result.summary ?? emptySummary);
+      setSummary({
+        ...emptySummary,
+        ...(result.summary ?? {}),
+      });
     } catch (err) {
       setError(
         err instanceof Error
@@ -92,28 +126,31 @@ export default function InventoryPage() {
     fetchInventory();
   }, [fetchInventory]);
 
-  // Unique categories
   const categories = useMemo(() => {
-    return Array.from(
-      new Map(
-        products.map((product) => [
-          product.category.id,
-          product.category.name,
-        ])
-      ).entries()
-    );
+    const unique = new Map<string, string>();
+
+    products.forEach((product) => {
+      if (product.category?.id) {
+        unique.set(product.category.id, product.category.name);
+      }
+    });
+
+    return Array.from(unique.entries());
   }, [products]);
 
-  // Filter products
   const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return products.filter((product) => {
       const matchesSearch =
-        product.name.toLowerCase().includes(search.toLowerCase()) ||
-        product.category.name.toLowerCase().includes(search.toLowerCase());
+        !query ||
+        product.name.toLowerCase().includes(query) ||
+        product.category?.name.toLowerCase().includes(query) ||
+        product.id.toLowerCase().includes(query);
 
       const matchesCategory =
         categoryFilter === "ALL" ||
-        product.category.id === categoryFilter;
+        product.category?.id === categoryFilter;
 
       let matchesStock = true;
 
@@ -127,11 +164,27 @@ export default function InventoryPage() {
         matchesStock = product.stock > summary.lowStockLimit;
       }
 
-      return matchesSearch && matchesCategory && matchesStock;
-    });
-  }, [products, search, categoryFilter, stockFilter, summary.lowStockLimit]);
+      const matchesAvailability =
+        availabilityFilter === "ALL" ||
+        (availabilityFilter === "AVAILABLE" && product.isAvailable) ||
+        (availabilityFilter === "UNAVAILABLE" && !product.isAvailable);
 
-  // Stock status
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesStock &&
+        matchesAvailability
+      );
+    });
+  }, [
+    products,
+    search,
+    categoryFilter,
+    stockFilter,
+    availabilityFilter,
+    summary.lowStockLimit,
+  ]);
+
   function getStockStatus(stock: number) {
     if (stock === 0) {
       return {
@@ -153,19 +206,24 @@ export default function InventoryPage() {
     };
   }
 
-  // Open adjustment modal
   function openAdjustment(product: Product) {
     setSelectedProduct(product);
     setAction("ADD");
     setQuantity("1");
+    setReason("");
     setError("");
     setSuccess("");
   }
 
-  // Submit stock adjustment
-  async function handleAdjustment(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
+  function closeAdjustment() {
+    if (saving) return;
+
+    setSelectedProduct(null);
+    setError("");
+    setReason("");
+  }
+
+  async function handleAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!selectedProduct) return;
@@ -173,16 +231,36 @@ export default function InventoryPage() {
     const amount = Number(quantity);
 
     if (
-      !Number.isInteger(amount) ||
+      !Number.isSafeInteger(amount) ||
       amount < 0 ||
       (action !== "SET" && amount === 0)
     ) {
-      setError("Enter a valid stock quantity.");
+      setError(
+        action === "SET"
+          ? "Enter a valid non-negative whole number."
+          : "Enter a quantity greater than zero."
+      );
       return;
     }
 
     if (action === "REMOVE" && amount > selectedProduct.stock) {
-      setError("Insufficient stock.");
+      setError("Insufficient stock. You cannot remove more than available.");
+      return;
+    }
+
+    const calculatedStock =
+      action === "ADD"
+        ? selectedProduct.stock + amount
+        : action === "REMOVE"
+          ? selectedProduct.stock - amount
+          : amount;
+
+    if (
+      !Number.isSafeInteger(calculatedStock) ||
+      calculatedStock < 0 ||
+      calculatedStock > 2_147_483_647
+    ) {
+      setError("The resulting stock quantity is outside the allowed range.");
       return;
     }
 
@@ -200,19 +278,17 @@ export default function InventoryPage() {
           productId: selectedProduct.id,
           action,
           quantity: amount,
+          reason: reason.trim() || undefined,
         }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Stock adjustment failed."
-        );
-      }
+      await readResponse(response);
 
       setSelectedProduct(null);
-      setSuccess("Stock updated successfully.");
+      setReason("");
+      setSuccess(
+        `${selectedProduct.name} stock updated successfully.`
+      );
 
       await fetchInventory();
     } catch (err) {
@@ -230,11 +306,38 @@ export default function InventoryPage() {
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(value);
+      maximumFractionDigits: 2,
+    }).format(Number(value) || 0);
 
   const inputClass =
-    "w-full rounded-lg border border-[#EADED4] bg-white px-4 py-3 text-sm text-[#2B1B14] outline-none focus:border-[#754426] focus:ring-2 focus:ring-[#754426]/10";
+    "w-full rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm text-[#2B1B14] outline-none transition placeholder:text-[#A99486] focus:border-[#754426] focus:ring-2 focus:ring-[#754426]/10 disabled:opacity-60";
+
+  const summaryCards = [
+    {
+      title: "Total Products",
+      value: summary.totalProducts,
+      description: "Products in inventory",
+      icon: Package,
+    },
+    {
+      title: "Total Stock Units",
+      value: summary.totalStock,
+      description: "Current inventory quantity",
+      icon: TrendingUp,
+    },
+    {
+      title: "Low Stock",
+      value: summary.lowStock,
+      description: `1–${summary.lowStockLimit} units remaining`,
+      icon: AlertCircle,
+    },
+    {
+      title: "Out of Stock",
+      value: summary.outOfStock,
+      description: "Products with zero stock",
+      icon: TrendingDown,
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-[#F8F3ED] p-4 sm:p-6 lg:p-8">
@@ -243,11 +346,11 @@ export default function InventoryPage() {
         {/* Header */}
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold tracking-wider text-[#A76535]">
+            <p className="text-xs font-bold tracking-[0.2em] text-[#A76535]">
               BREWB​ITES ADMIN
             </p>
 
-            <h1 className="mt-2 text-3xl font-bold text-[#2B1B14]">
+            <h1 className="mt-2 text-2xl font-bold text-[#2B1B14] sm:text-3xl">
               Inventory Management
             </h1>
 
@@ -260,9 +363,13 @@ export default function InventoryPage() {
             type="button"
             onClick={fetchInventory}
             disabled={loading}
-            className="rounded-lg border border-[#EADED4] bg-white px-5 py-3 text-sm font-semibold text-[#754426] transition hover:bg-[#F8F3ED] disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm font-semibold text-[#754426] transition hover:bg-[#F4EAE0] disabled:opacity-50"
           >
-            {loading ? "Refreshing..." : "↻ Refresh Inventory"}
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
+            Refresh Inventory
           </button>
         </header>
 
@@ -270,107 +377,118 @@ export default function InventoryPage() {
         {error && !selectedProduct && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
-            {error}
+            <AlertCircle size={19} className="mt-0.5 shrink-0" />
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="ml-auto"
+              aria-label="Dismiss error"
+            >
+              <X size={17} />
+            </button>
           </div>
         )}
 
         {success && (
           <div
             role="status"
-            className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+            className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
           >
-            {success}
+            <CheckCircle2 size={19} />
+            <p>{success}</p>
+            <button
+              type="button"
+              onClick={() => setSuccess("")}
+              className="ml-auto"
+              aria-label="Dismiss success"
+            >
+              <X size={17} />
+            </button>
           </div>
         )}
 
-        {/* Summary Cards */}
+        {/* Summary */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            {
-              title: "Total Products",
-              value: summary.totalProducts,
-              icon: "📦",
-              description: "Products in inventory",
-            },
-            {
-              title: "Total Stock Units",
-              value: summary.totalStock,
-              icon: "☕",
-              description: "Available inventory quantity",
-            },
-            {
-              title: "Low Stock",
-              value: summary.lowStock,
-              icon: "⚠️",
-              description: `1–${summary.lowStockLimit} units remaining`,
-            },
-            {
-              title: "Out of Stock",
-              value: summary.outOfStock,
-              icon: "🚫",
-              description: "Products with zero stock",
-            },
-          ].map((card) => (
-            <div
-              key={card.title}
-              className="rounded-2xl border border-[#EADED4] bg-white p-5 shadow-sm"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-[#80695B]">
-                  {card.title}
+          {summaryCards.map((card) => {
+            const Icon = card.icon;
+
+            return (
+              <div
+                key={card.title}
+                className="rounded-2xl border border-[#EADED4] bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-[#80695B]">
+                    {card.title}
+                  </p>
+
+                  <div className="rounded-xl bg-[#F8F3ED] p-2.5 text-[#754426]">
+                    <Icon size={19} />
+                  </div>
+                </div>
+
+                <h2 className="mt-4 text-3xl font-bold text-[#2B1B14]">
+                  {loading ? "—" : card.value.toLocaleString("en-IN")}
+                </h2>
+
+                <p className="mt-2 text-xs text-[#80695B]">
+                  {card.description}
                 </p>
-                <span className="text-2xl">{card.icon}</span>
               </div>
-
-              <h2 className="mt-3 text-3xl font-bold text-[#2B1B14]">
-                {loading ? "—" : card.value.toLocaleString("en-IN")}
-              </h2>
-
-              <p className="mt-2 text-xs text-[#80695B]">
-                {card.description}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         {/* Inventory Value */}
-        <section className="rounded-2xl border border-[#EADED4] bg-white p-5">
+        <section className="rounded-2xl border border-[#EADED4] bg-white p-5 shadow-sm">
           <p className="text-sm font-medium text-[#80695B]">
             Estimated Inventory Value
           </p>
 
           <h2 className="mt-2 text-2xl font-bold text-[#754426]">
-            {loading ? "Loading..." : formatCurrency(summary.inventoryValue)}
+            {loading
+              ? "Loading..."
+              : formatCurrency(summary.inventoryValue)}
           </h2>
 
           <p className="mt-1 text-xs text-[#80695B]">
-            Calculated using product selling prices × current stock.
-            This is not accounting cost value.
+            Selling price × current stock. This is not purchase cost or
+            accounting valuation.
           </p>
         </section>
 
-        {/* Low Stock Alert */}
-        {!loading && summary.lowStock + summary.outOfStock > 0 && (
-          <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-            <h2 className="font-semibold text-amber-900">
-              ⚠ Inventory Attention Required
-            </h2>
+        {/* Inventory Alert */}
+        {!loading &&
+          summary.lowStock + summary.outOfStock > 0 && (
+            <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle
+                  size={21}
+                  className="mt-0.5 shrink-0 text-amber-700"
+                />
 
-            <p className="mt-1 text-sm text-amber-800">
-              {summary.lowStock} products have low stock and{" "}
-              {summary.outOfStock} products are out of stock.
-              Consider replenishing them.
-            </p>
-          </section>
-        )}
+                <div>
+                  <h2 className="font-semibold text-amber-900">
+                    Inventory Attention Required
+                  </h2>
 
-        {/* Product Inventory Table */}
+                  <p className="mt-1 text-sm text-amber-800">
+                    {summary.lowStock} products have low stock and{" "}
+                    {summary.outOfStock} products are out of stock.
+                    Consider replenishing them.
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
+
+        {/* Inventory Table */}
         <section className="overflow-hidden rounded-2xl border border-[#EADED4] bg-white shadow-sm">
-
-          <div className="border-b border-[#EADED4] p-5">
-            <h2 className="text-xl font-semibold text-[#2B1B14]">
+          <div className="border-b border-[#EADED4] p-5 sm:p-6">
+            <h2 className="text-lg font-bold text-[#2B1B14]">
               Product Stock Overview
             </h2>
 
@@ -380,65 +498,116 @@ export default function InventoryPage() {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 gap-3 border-b border-[#EADED4] p-5 md:grid-cols-3">
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search products..."
-              className={inputClass}
-            />
+          <div className="grid grid-cols-1 gap-3 border-b border-[#EADED4] p-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="relative">
+              <Search
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A99486]"
+              />
 
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className={inputClass}
-            >
-              <option value="ALL">All Categories</option>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search products..."
+                className={`${inputClass} pl-10`}
+              />
+            </div>
 
-              {categories.map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={categoryFilter}
+                onChange={(event) =>
+                  setCategoryFilter(event.target.value)
+                }
+                className={`${inputClass} appearance-none pr-9`}
+              >
+                <option value="ALL">All Categories</option>
 
-            <select
-              value={stockFilter}
-              onChange={(event) => setStockFilter(event.target.value)}
-              className={inputClass}
-            >
-              <option value="ALL">All Stock Status</option>
-              <option value="IN_STOCK">In Stock</option>
-              <option value="LOW">Low Stock</option>
-              <option value="OUT">Out of Stock</option>
-            </select>
+                {categories.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#80695B]"
+              />
+            </div>
+
+            <div className="relative">
+              <select
+                value={stockFilter}
+                onChange={(event) =>
+                  setStockFilter(event.target.value as StockFilter)
+                }
+                className={`${inputClass} appearance-none pr-9`}
+              >
+                <option value="ALL">All Stock Status</option>
+                <option value="IN_STOCK">In Stock</option>
+                <option value="LOW">Low Stock</option>
+                <option value="OUT">Out of Stock</option>
+              </select>
+
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#80695B]"
+              />
+            </div>
+
+            <div className="relative">
+              <select
+                value={availabilityFilter}
+                onChange={(event) =>
+                  setAvailabilityFilter(
+                    event.target.value as AvailabilityFilter
+                  )
+                }
+                className={`${inputClass} appearance-none pr-9`}
+              >
+                <option value="ALL">All Product Status</option>
+                <option value="AVAILABLE">Available</option>
+                <option value="UNAVAILABLE">Unavailable</option>
+              </select>
+
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#80695B]"
+              />
+            </div>
           </div>
 
-          {/* Table */}
+          {/* Table Content */}
           {loading ? (
-            <div className="p-12 text-center text-sm text-[#80695B]">
-              Loading inventory...
+            <div className="flex flex-col items-center justify-center gap-3 p-14 text-[#80695B]">
+              <Loader2 size={27} className="animate-spin" />
+              <p className="text-sm">Loading inventory...</p>
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="font-semibold text-[#2B1B14]">
-                No products found.
-              </p>
+            <div className="flex flex-col items-center justify-center p-14 text-center">
+              <Package size={35} className="text-[#A99486]" />
+
+              <h3 className="mt-4 font-semibold text-[#2B1B14]">
+                No products found
+              </h3>
+
               <p className="mt-1 text-sm text-[#80695B]">
                 Try changing your search or filters.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left">
+              <table className="w-full min-w-[900px] text-left">
                 <thead className="bg-[#F8F3ED] text-xs uppercase tracking-wide text-[#80695B]">
                   <tr>
                     <th className="px-5 py-4">Product</th>
                     <th className="px-5 py-4">Category</th>
                     <th className="px-5 py-4">Price</th>
                     <th className="px-5 py-4">Stock</th>
-                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Stock Status</th>
+                    <th className="px-5 py-4">Availability</th>
                     <th className="px-5 py-4">Action</th>
                   </tr>
                 </thead>
@@ -453,16 +622,36 @@ export default function InventoryPage() {
                         className="transition hover:bg-[#F8F3ED]/60"
                       >
                         <td className="px-5 py-4">
-                          <p className="font-semibold text-[#2B1B14]">
-                            {product.name}
-                          </p>
-                          <p className="mt-1 text-xs text-[#80695B]">
-                            ID: {product.id}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#F8F3ED]">
+                              {product.image ? (
+                                <img
+                                  src={product.image}
+                                  alt={product.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Package
+                                  size={19}
+                                  className="text-[#A99486]"
+                                />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="font-semibold text-[#2B1B14]">
+                                {product.name}
+                              </p>
+
+                              <p className="mt-1 text-xs text-[#80695B]">
+                                ID: {product.id}
+                              </p>
+                            </div>
+                          </div>
                         </td>
 
                         <td className="px-5 py-4 text-sm text-[#80695B]">
-                          {product.category.name}
+                          {product.category?.name ?? "Uncategorized"}
                         </td>
 
                         <td className="px-5 py-4 text-sm font-medium text-[#2B1B14]">
@@ -471,8 +660,9 @@ export default function InventoryPage() {
 
                         <td className="px-5 py-4">
                           <span className="font-bold text-[#2B1B14]">
-                            {product.stock}
+                            {product.stock.toLocaleString("en-IN")}
                           </span>
+
                           <span className="ml-1 text-xs text-[#80695B]">
                             units
                           </span>
@@ -480,9 +670,23 @@ export default function InventoryPage() {
 
                         <td className="px-5 py-4">
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${status.className}`}
                           >
                             {status.label}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                              product.isAvailable
+                                ? "bg-green-50 text-green-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {product.isAvailable
+                              ? "Available"
+                              : "Unavailable"}
                           </span>
                         </td>
 
@@ -490,7 +694,8 @@ export default function InventoryPage() {
                           <button
                             type="button"
                             onClick={() => openAdjustment(product)}
-                            className="rounded-lg bg-[#754426] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#2B1B14]"
+                            disabled={!!selectedProduct || saving}
+                            className="rounded-lg bg-[#754426] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#2B1B14] disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Adjust Stock
                           </button>
@@ -513,9 +718,11 @@ export default function InventoryPage() {
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             onMouseDown={(event) => {
-              if (event.target === event.currentTarget && !saving) {
-                setSelectedProduct(null);
-                setError("");
+              if (
+                event.target === event.currentTarget &&
+                !saving
+              ) {
+                closeAdjustment();
               }
             }}
           >
@@ -542,14 +749,11 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    setError("");
-                  }}
+                  onClick={closeAdjustment}
                   aria-label="Close modal"
-                  className="text-xl text-[#80695B] hover:text-[#2B1B14] disabled:opacity-50"
+                  className="rounded-lg p-1 text-[#80695B] transition hover:bg-[#F8F3ED] hover:text-[#2B1B14] disabled:opacity-50"
                 >
-                  ×
+                  <X size={20} />
                 </button>
               </div>
 
@@ -557,16 +761,24 @@ export default function InventoryPage() {
                 <p className="text-xs text-[#80695B]">
                   Current Stock
                 </p>
+
                 <p className="mt-1 text-2xl font-bold text-[#754426]">
-                  {selectedProduct.stock} units
+                  {selectedProduct.stock.toLocaleString("en-IN")} units
+                </p>
+
+                <p className="mt-1 text-xs text-[#80695B]">
+                  {selectedProduct.category?.name ?? "Uncategorized"}
                 </p>
               </div>
 
-              <form onSubmit={handleAdjustment} className="mt-5 space-y-4">
+              <form
+                onSubmit={handleAdjustment}
+                className="mt-5 space-y-4"
+              >
                 <div>
                   <label
                     htmlFor="stockAction"
-                    className="mb-2 block text-sm font-medium text-[#2B1B14]"
+                    className="mb-2 block text-sm font-semibold text-[#2B1B14]"
                   >
                     Adjustment Type
                   </label>
@@ -577,6 +789,7 @@ export default function InventoryPage() {
                     onChange={(event) =>
                       setAction(event.target.value as StockAction)
                     }
+                    disabled={saving}
                     className={inputClass}
                   >
                     <option value="ADD">Add Stock</option>
@@ -588,28 +801,64 @@ export default function InventoryPage() {
                 <div>
                   <label
                     htmlFor="quantity"
-                    className="mb-2 block text-sm font-medium text-[#2B1B14]"
+                    className="mb-2 block text-sm font-semibold text-[#2B1B14]"
                   >
-                    {action === "SET" ? "New Stock Quantity" : "Quantity"}
+                    {action === "SET"
+                      ? "New Stock Quantity"
+                      : "Quantity"}
                   </label>
 
                   <input
                     id="quantity"
                     type="number"
                     min={action === "SET" ? 0 : 1}
+                    max={2_147_483_647}
                     step="1"
                     required
                     value={quantity}
-                    onChange={(event) => setQuantity(event.target.value)}
+                    onChange={(event) =>
+                      setQuantity(event.target.value)
+                    }
+                    disabled={saving}
                     className={inputClass}
                   />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="reason"
+                    className="mb-2 block text-sm font-semibold text-[#2B1B14]"
+                  >
+                    Reason
+                    <span className="ml-1 font-normal text-[#A99486]">
+                      (Optional)
+                    </span>
+                  </label>
+
+                  <textarea
+                    id="reason"
+                    value={reason}
+                    onChange={(event) =>
+                      setReason(event.target.value)
+                    }
+                    maxLength={500}
+                    rows={2}
+                    disabled={saving}
+                    placeholder="e.g. New stock received, damaged items..."
+                    className={inputClass}
+                  />
+
+                  <p className="mt-1 text-right text-xs text-[#A99486]">
+                    {reason.length}/500
+                  </p>
                 </div>
 
                 {error && (
                   <div
                     role="alert"
-                    className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
+                    className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
                   >
+                    <AlertCircle size={17} className="mt-0.5 shrink-0" />
                     {error}
                   </div>
                 )}
@@ -618,11 +867,8 @@ export default function InventoryPage() {
                   <button
                     type="button"
                     disabled={saving}
-                    onClick={() => {
-                      setSelectedProduct(null);
-                      setError("");
-                    }}
-                    className="flex-1 rounded-lg border border-[#EADED4] px-4 py-3 text-sm font-semibold text-[#754426] hover:bg-[#F8F3ED] disabled:opacity-50"
+                    onClick={closeAdjustment}
+                    className="flex-1 rounded-xl border border-[#EADED4] px-4 py-3 text-sm font-semibold text-[#754426] transition hover:bg-[#F8F3ED] disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -630,8 +876,12 @@ export default function InventoryPage() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="flex-1 rounded-lg bg-[#754426] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2B1B14] disabled:opacity-50"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#754426] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#2B1B14] disabled:cursor-not-allowed disabled:opacity-50"
                   >
+                    {saving && (
+                      <Loader2 size={16} className="animate-spin" />
+                    )}
+
                     {saving ? "Updating..." : "Confirm Update"}
                   </button>
                 </div>

@@ -2,19 +2,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type AlertProduct = {
   id: string;
   name: string;
-  image: string;
+  image: string | null;
   stock: number;
-  price: number;
+  price: number | string;
   alertType: "LOW_STOCK" | "OUT_OF_STOCK";
   recommendedRestock: number;
   category: {
     id: string;
     name: string;
-  };
+  } | null;
   updatedAt: string;
 };
 
@@ -24,21 +25,25 @@ type AlertSummary = {
   lowStock: number;
 };
 
+const EMPTY_SUMMARY: AlertSummary = {
+  totalAlerts: 0,
+  outOfStock: 0,
+  lowStock: 0,
+};
+
+const THRESHOLD_OPTIONS = [5, 10, 15, 20, 30, 50];
+
 export default function InventoryAlertsPage() {
   const [alerts, setAlerts] = useState<AlertProduct[]>([]);
-  const [summary, setSummary] = useState<AlertSummary>({
-    totalAlerts: 0,
-    outOfStock: 0,
-    lowStock: 0,
-  });
-
+  const [summary, setSummary] = useState<AlertSummary>(EMPTY_SUMMARY);
   const [threshold, setThreshold] = useState(10);
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchAlerts = useCallback(async () => {
+  const fetchAlerts = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       setError("");
@@ -48,62 +53,91 @@ export default function InventoryAlertsPage() {
         {
           credentials: "include",
           cache: "no-store",
+          signal,
         }
       );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to load alerts.");
+        throw new Error(result.message || "Failed to load inventory alerts.");
       }
 
-      setAlerts(result.alerts ?? []);
-      setSummary(result.summary);
+      setAlerts(Array.isArray(result.alerts) ? result.alerts : []);
+      setSummary({
+        totalAlerts: Number(result.summary?.totalAlerts ?? 0),
+        outOfStock: Number(result.summary?.outOfStock ?? 0),
+        lowStock: Number(result.summary?.lowStock ?? 0),
+      });
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong."
+          : "Something went wrong while loading alerts."
       );
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [threshold]);
 
   useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+    const controller = new AbortController();
+
+    fetchAlerts(controller.signal);
+
+    return () => controller.abort();
+  }, [fetchAlerts, refreshKey]);
 
   const filteredAlerts = alerts.filter((product) => {
+    const searchTerm = search.trim().toLowerCase();
+
     const matchesSearch =
-      product.name.toLowerCase().includes(search.toLowerCase()) ||
-      product.category.name.toLowerCase().includes(search.toLowerCase());
+      product.name.toLowerCase().includes(searchTerm) ||
+      (product.category?.name ?? "").toLowerCase().includes(searchTerm);
 
     const matchesFilter =
-      filter === "ALL" ||
-      product.alertType === filter;
+      filter === "ALL" || product.alertType === filter;
 
     return matchesSearch && matchesFilter;
   });
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
+  const formatCurrency = (amount: number | string) => {
+    const value = Number(amount);
+
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 2,
-    }).format(amount);
+    }).format(Number.isFinite(value) ? value : 0);
+  };
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-IN", {
+  const formatDate = (date: string) => {
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "Not available";
+    }
+
+    return parsedDate.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
+  };
+
+  const refreshAlerts = () => {
+    setRefreshKey((current) => current + 1);
+  };
 
   return (
     <div className="min-h-screen bg-[#F8F3ED] px-4 py-6 text-[#2B1B14] sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-7">
-
         {/* HEADER */}
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -121,19 +155,19 @@ export default function InventoryAlertsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <a
+            <Link
               href="/admin/inventory"
               className="rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm font-semibold hover:bg-[#FDF9F5]"
             >
               ← Inventory
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/admin/inventory/history"
               className="rounded-xl bg-[#754426] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2B1B14]"
             >
               Stock History →
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -156,7 +190,7 @@ export default function InventoryAlertsPage() {
           <SummaryCard
             title="Low Stock"
             value={summary.lowStock}
-            description="Products below threshold"
+            description="Products above zero but at or below threshold"
             icon="↓"
           />
         </div>
@@ -172,25 +206,21 @@ export default function InventoryAlertsPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <label
-                htmlFor="threshold"
-                className="text-sm font-medium"
-              >
-                Alert below:
+              <label htmlFor="threshold" className="text-sm font-medium">
+                Alert at or below:
               </label>
 
               <select
                 id="threshold"
                 value={threshold}
-                onChange={(e) => setThreshold(Number(e.target.value))}
+                onChange={(event) => setThreshold(Number(event.target.value))}
                 className="rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm outline-none focus:border-[#A76535]"
               >
-                <option value={5}>5 units</option>
-                <option value={10}>10 units</option>
-                <option value={15}>15 units</option>
-                <option value={20}>20 units</option>
-                <option value={30}>30 units</option>
-                <option value={50}>50 units</option>
+                {THRESHOLD_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {value} units
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -207,14 +237,16 @@ export default function InventoryAlertsPage() {
             <input
               type="search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Search product or category..."
+              aria-label="Search product or category"
               className="rounded-xl border border-[#EADED4] px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             />
 
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(event) => setFilter(event.target.value)}
+              aria-label="Filter inventory alerts"
               className="rounded-xl border border-[#EADED4] bg-white px-4 py-3 text-sm outline-none focus:border-[#A76535]"
             >
               <option value="ALL">All Alerts</option>
@@ -226,11 +258,16 @@ export default function InventoryAlertsPage() {
 
         {/* ERROR */}
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            <p>{error}</p>
+
             <button
-              onClick={fetchAlerts}
-              className="ml-3 font-bold underline"
+              type="button"
+              onClick={refreshAlerts}
+              className="mt-2 font-bold underline"
             >
               Retry
             </button>
@@ -248,9 +285,10 @@ export default function InventoryAlertsPage() {
             </div>
 
             <button
-              onClick={fetchAlerts}
+              type="button"
+              onClick={refreshAlerts}
               disabled={loading}
-              className="rounded-lg border border-[#EADED4] px-3 py-2 text-sm font-semibold hover:bg-[#F8F3ED] disabled:opacity-50"
+              className="rounded-lg border border-[#EADED4] px-3 py-2 text-sm font-semibold hover:bg-[#F8F3ED] disabled:cursor-not-allowed disabled:opacity-50"
             >
               ↻ Refresh
             </button>
@@ -258,14 +296,20 @@ export default function InventoryAlertsPage() {
 
           {loading ? (
             <div className="flex min-h-64 items-center justify-center">
-              <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#EADED4] border-t-[#754426]" />
+              <div
+                className="h-9 w-9 animate-spin rounded-full border-4 border-[#EADED4] border-t-[#754426]"
+                role="status"
+                aria-label="Loading inventory alerts"
+              />
+            </div>
+          ) : error ? (
+            <div className="flex min-h-48 items-center justify-center px-5 text-center text-sm text-[#80695B]">
+              Unable to display inventory alerts. Please retry.
             </div>
           ) : filteredAlerts.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
               <span className="text-4xl">✓</span>
-              <h3 className="mt-3 font-bold">
-                No stock alerts found
-              </h3>
+              <h3 className="mt-3 font-bold">No stock alerts found</h3>
               <p className="mt-2 text-sm text-[#80695B]">
                 No products match your current filters.
               </p>
@@ -309,9 +353,7 @@ export default function InventoryAlertsPage() {
                             )}
 
                             <div>
-                              <p className="font-semibold">
-                                {product.name}
-                              </p>
+                              <p className="font-semibold">{product.name}</p>
                               <p className="mt-1 text-xs text-[#80695B]">
                                 {formatCurrency(product.price)}
                               </p>
@@ -320,7 +362,7 @@ export default function InventoryAlertsPage() {
                         </td>
 
                         <td className="px-5 py-4 text-sm text-[#80695B]">
-                          {product.category.name}
+                          {product.category?.name ?? "Uncategorized"}
                         </td>
 
                         <td className="px-5 py-4">
@@ -358,12 +400,12 @@ export default function InventoryAlertsPage() {
                         </td>
 
                         <td className="px-5 py-4">
-                          <a
+                          <Link
                             href={`/admin/inventory?productId=${encodeURIComponent(product.id)}`}
                             className="inline-flex whitespace-nowrap rounded-lg bg-[#754426] px-3 py-2 text-xs font-semibold text-white hover:bg-[#2B1B14]"
                           >
                             Manage Stock →
-                          </a>
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -384,10 +426,6 @@ export default function InventoryAlertsPage() {
   );
 }
 
-// ==========================================
-// SUMMARY CARD
-// ==========================================
-
 function SummaryCard({
   title,
   value,
@@ -402,9 +440,7 @@ function SummaryCard({
   return (
     <div className="rounded-2xl border border-[#EADED4] bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-[#80695B]">
-          {title}
-        </p>
+        <p className="text-sm font-medium text-[#80695B]">{title}</p>
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F8F3ED] text-xl font-bold text-[#754426]">
           {icon}
         </span>
@@ -414,9 +450,7 @@ function SummaryCard({
         {value.toLocaleString("en-IN")}
       </p>
 
-      <p className="mt-1 text-xs text-[#80695B]">
-        {description}
-      </p>
+      <p className="mt-1 text-xs text-[#80695B]">{description}</p>
     </div>
   );
 }

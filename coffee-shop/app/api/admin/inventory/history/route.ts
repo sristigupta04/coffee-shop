@@ -6,6 +6,13 @@ import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+const MAX_PAGE = 1_000_000;
+
+const MOVEMENT_TYPES = ["ADD", "REMOVE", "SET"] as const;
+type MovementType = (typeof MOVEMENT_TYPES)[number];
+
 // ==========================================
 // ADMIN AUTHORIZATION
 // ==========================================
@@ -33,9 +40,7 @@ async function authorizeAdmin() {
     };
   }
 
-  return {
-    authorized: true as const,
-  };
+  return { authorized: true as const };
 }
 
 // ==========================================
@@ -50,34 +55,65 @@ export async function GET(request: NextRequest) {
       return auth.response;
     }
 
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
 
     // ==========================================
     // PAGINATION
     // ==========================================
 
-    const page = Math.max(
-      1,
-      Number(searchParams.get("page")) || 1
-    );
+    const rawPage = searchParams.get("page");
+    const rawLimit = searchParams.get("limit");
 
-    const pageSize = Math.min(
-      100,
-      Math.max(1, Number(searchParams.get("limit")) || 20)
-    );
+    const page = rawPage === null ? 1 : Number(rawPage);
+
+    const pageSize =
+      rawLimit === null
+        ? DEFAULT_PAGE_SIZE
+        : Number(rawLimit);
+
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      page > MAX_PAGE
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid page number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > MAX_PAGE_SIZE
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Limit must be between 1 and 100.",
+        },
+        { status: 400 }
+      );
+    }
 
     // ==========================================
     // FILTERS
     // ==========================================
 
-    const type = searchParams.get("type");
-    const productId = searchParams.get("productId");
+    const rawType = searchParams.get("type");
+    const productId = searchParams.get("productId")?.trim();
     const search = searchParams.get("search")?.trim();
 
     const from = searchParams.get("from");
     const to = searchParams.get("to");
 
-    if (type && !["ADD", "REMOVE", "SET"].includes(type)) {
+    if (
+      rawType &&
+      !MOVEMENT_TYPES.includes(rawType as MovementType)
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -87,7 +123,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (from && Number.isNaN(Date.parse(from))) {
+    if (search && search.length > 200) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Search cannot exceed 200 characters.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (productId && productId.length > 200) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid product ID.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // DATE VALIDATION
+    // ==========================================
+
+    const fromDate = from ? new Date(from) : undefined;
+    const toDate = to ? new Date(to) : undefined;
+
+    if (fromDate && Number.isNaN(fromDate.getTime())) {
       return NextResponse.json(
         {
           success: false,
@@ -97,7 +160,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (to && Number.isNaN(Date.parse(to))) {
+    if (toDate && Number.isNaN(toDate.getTime())) {
       return NextResponse.json(
         {
           success: false,
@@ -106,9 +169,6 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const fromDate = from ? new Date(from) : undefined;
-    const toDate = to ? new Date(to) : undefined;
 
     if (
       fromDate &&
@@ -129,10 +189,8 @@ export async function GET(request: NextRequest) {
     // ==========================================
 
     const where: Prisma.StockMovementWhereInput = {
-      ...(type
-        ? {
-            type: type as "ADD" | "REMOVE" | "SET",
-          }
+      ...(rawType
+        ? { type: rawType as MovementType }
         : {}),
 
       ...(productId ? { productId } : {}),
@@ -177,12 +235,11 @@ export async function GET(request: NextRequest) {
     };
 
     // ==========================================
-    // FETCH MOVEMENTS, COUNT AND SUMMARY
+    // FETCH MOVEMENTS + SUMMARY
     // ==========================================
 
-    const [movements, totalRecords, summary] =
+    const [movements, totalRecords, summaryRecords] =
       await prisma.$transaction([
-        // Movement records
         prisma.stockMovement.findMany({
           where,
           include: {
@@ -207,19 +264,18 @@ export async function GET(request: NextRequest) {
               },
             },
           },
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: [
+            { createdAt: "desc" },
+            { id: "desc" },
+          ],
           skip: (page - 1) * pageSize,
           take: pageSize,
         }),
 
-        // Total records
         prisma.stockMovement.count({
           where,
         }),
 
-        // Summary records
         prisma.stockMovement.findMany({
           where,
           select: {
@@ -235,7 +291,7 @@ export async function GET(request: NextRequest) {
 
     const totalPages = Math.ceil(totalRecords / pageSize);
 
-    const summaryData = {
+    const summary = {
       totalMovements: totalRecords,
       additions: 0,
       removals: 0,
@@ -244,15 +300,15 @@ export async function GET(request: NextRequest) {
       removedQuantity: 0,
     };
 
-    for (const item of summary) {
-      if (item.type === "ADD") {
-        summaryData.additions += 1;
-        summaryData.addedQuantity += item.quantity;
-      } else if (item.type === "REMOVE") {
-        summaryData.removals += 1;
-        summaryData.removedQuantity += item.quantity;
-      } else if (item.type === "SET") {
-        summaryData.manualAdjustments += 1;
+    for (const movement of summaryRecords) {
+      if (movement.type === "ADD") {
+        summary.additions += 1;
+        summary.addedQuantity += movement.quantity;
+      } else if (movement.type === "REMOVE") {
+        summary.removals += 1;
+        summary.removedQuantity += movement.quantity;
+      } else if (movement.type === "SET") {
+        summary.manualAdjustments += 1;
       }
     }
 
@@ -263,7 +319,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       movements,
-      summary: summaryData,
+      summary,
       pagination: {
         page,
         pageSize,

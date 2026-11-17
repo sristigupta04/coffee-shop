@@ -5,6 +5,15 @@ import { getcurrentuser } from "@/app/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+const LOW_STOCK_LIMIT = 10;
+const MAX_STOCK = 2_147_483_647;
+
+type StockAction = "ADD" | "REMOVE" | "SET";
+
+function isStockAction(value: unknown): value is StockAction {
+  return value === "ADD" || value === "REMOVE" || value === "SET";
+}
+
 // ==========================================
 // ADMIN AUTHORIZATION
 // ==========================================
@@ -72,18 +81,17 @@ export async function GET() {
       0
     );
 
-    const lowStockLimit = 10;
-
     const lowStock = products.filter(
       (product) =>
         product.stock > 0 &&
-        product.stock <= lowStockLimit
+        product.stock <= LOW_STOCK_LIMIT
     ).length;
 
     const outOfStock = products.filter(
       (product) => product.stock === 0
     ).length;
 
+    // Estimated value using selling price, not purchase cost.
     const inventoryValue = products.reduce(
       (total, product) =>
         total + product.price * product.stock,
@@ -99,7 +107,7 @@ export async function GET() {
         lowStock,
         outOfStock,
         inventoryValue,
-        lowStockLimit,
+        lowStockLimit: LOW_STOCK_LIMIT,
       },
     });
   } catch (error) {
@@ -127,9 +135,35 @@ export async function PATCH(request: NextRequest) {
       return auth.response;
     }
 
-    const body = await request.json();
+    // Validate JSON body
+    let body: Record<string, unknown>;
 
-    const { productId, action, quantity, reason } = body;
+    try {
+      const parsed: unknown = await request.json();
+
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        return NextResponse.json(
+          { success: false, message: "Invalid request body." },
+          { status: 400 }
+        );
+      }
+
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON request body." },
+        { status: 400 }
+      );
+    }
+
+    const productId = body.productId;
+    const action = body.action;
+    const quantity = body.quantity;
+    const reason = body.reason;
 
     // Validate product ID
     if (
@@ -137,13 +171,16 @@ export async function PATCH(request: NextRequest) {
       !productId.trim()
     ) {
       return NextResponse.json(
-        { success: false, message: "Valid product ID is required." },
+        {
+          success: false,
+          message: "Valid product ID is required.",
+        },
         { status: 400 }
       );
     }
 
     // Validate action
-    if (!["ADD", "REMOVE", "SET"].includes(action)) {
+    if (!isStockAction(action)) {
       return NextResponse.json(
         {
           success: false,
@@ -158,13 +195,14 @@ export async function PATCH(request: NextRequest) {
       typeof quantity !== "number" ||
       !Number.isSafeInteger(quantity) ||
       quantity < 0 ||
-      (action !== "SET" && quantity <= 0)
+      (action !== "SET" && quantity <= 0) ||
+      quantity > MAX_STOCK
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Quantity must be a valid positive integer. SET accepts zero.",
+            "Quantity must be a valid integer. ADD and REMOVE require a positive quantity; SET accepts zero.",
         },
         { status: 400 }
       );
@@ -174,7 +212,7 @@ export async function PATCH(request: NextRequest) {
     if (
       reason !== undefined &&
       reason !== null &&
-      (typeof reason !== "string" || reason.length > 500)
+      (typeof reason !== "string" || reason.trim().length > 500)
     ) {
       return NextResponse.json(
         {
@@ -212,28 +250,34 @@ export async function PATCH(request: NextRequest) {
 
       let newStock = previousStock;
 
-      if (action === "ADD") {
-        newStock = previousStock + quantity;
+      switch (action) {
+        case "ADD":
+          newStock = previousStock + quantity;
+          break;
+
+        case "REMOVE":
+          if (quantity > previousStock) {
+            throw new Error("INSUFFICIENT_STOCK");
+          }
+
+          newStock = previousStock - quantity;
+          break;
+
+        case "SET":
+          newStock = quantity;
+          break;
       }
 
-      if (action === "REMOVE") {
-        if (quantity > previousStock) {
-          throw new Error("INSUFFICIENT_STOCK");
-        }
-
-        newStock = previousStock - quantity;
-      }
-
-      if (action === "SET") {
-        newStock = quantity;
-      }
-
-      if (!Number.isSafeInteger(newStock)) {
+      // Ensure the value fits Prisma Int / PostgreSQL integer.
+      if (
+        !Number.isSafeInteger(newStock) ||
+        newStock < 0 ||
+        newStock > MAX_STOCK
+      ) {
         throw new Error("INVALID_STOCK_VALUE");
       }
 
-      // Compare-and-update prevents overwriting
-      // another stock adjustment made concurrently.
+      // Prevent overwriting concurrent stock adjustments.
       const updated = await tx.product.updateMany({
         where: {
           id: productId,
@@ -248,7 +292,7 @@ export async function PATCH(request: NextRequest) {
         throw new Error("STOCK_CONFLICT");
       }
 
-      // Save audit history in the SAME transaction.
+      // Save audit history in the same transaction.
       const movement = await tx.stockMovement.create({
         data: {
           productId: product.id,
@@ -284,39 +328,43 @@ export async function PATCH(request: NextRequest) {
     console.error("Inventory PATCH error:", error);
 
     if (error instanceof Error) {
-      if (error.message === "PRODUCT_NOT_FOUND") {
-        return NextResponse.json(
-          { success: false, message: "Product not found." },
-          { status: 404 }
-        );
-      }
+      switch (error.message) {
+        case "PRODUCT_NOT_FOUND":
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Product not found.",
+            },
+            { status: 404 }
+          );
 
-      if (error.message === "INSUFFICIENT_STOCK") {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Cannot remove more stock than available.",
-          },
-          { status: 400 }
-        );
-      }
+        case "INSUFFICIENT_STOCK":
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Cannot remove more stock than available.",
+            },
+            { status: 400 }
+          );
 
-      if (error.message === "STOCK_CONFLICT") {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Stock changed during this operation. Refresh and try again.",
-          },
-          { status: 409 }
-        );
-      }
+        case "STOCK_CONFLICT":
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "Stock changed during this operation. Refresh and try again.",
+            },
+            { status: 409 }
+          );
 
-      if (error.message === "INVALID_STOCK_VALUE") {
-        return NextResponse.json(
-          { success: false, message: "Invalid stock value." },
-          { status: 400 }
-        );
+        case "INVALID_STOCK_VALUE":
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Invalid stock value.",
+            },
+            { status: 400 }
+          );
       }
     }
 

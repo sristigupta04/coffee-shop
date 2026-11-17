@@ -5,6 +5,9 @@ import { getcurrentuser } from "@/app/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+const DEFAULT_THRESHOLD = 10;
+const MAX_THRESHOLD = 10000;
+
 // ==========================================
 // ADMIN AUTHORIZATION
 // ==========================================
@@ -47,17 +50,17 @@ export async function GET(request: NextRequest) {
       return auth.response;
     }
 
-    const { searchParams } = new URL(request.url);
+    const rawThreshold = request.nextUrl.searchParams.get("threshold");
 
-    const rawThreshold = searchParams.get("threshold");
-    const threshold = rawThreshold === null
-      ? 10
-      : Number(rawThreshold);
+    const threshold =
+      rawThreshold === null
+        ? DEFAULT_THRESHOLD
+        : Number(rawThreshold);
 
     if (
       !Number.isSafeInteger(threshold) ||
       threshold < 1 ||
-      threshold > 10000
+      threshold > MAX_THRESHOLD
     ) {
       return NextResponse.json(
         {
@@ -68,12 +71,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Include all products, even when isAvailable is false.
+    // Stock alerts must reflect actual inventory levels.
     const products = await prisma.product.findMany({
       where: {
         stock: {
           lte: threshold,
         },
-        isAvailable: true,
       },
       select: {
         id: true,
@@ -127,7 +131,7 @@ export async function GET(request: NextRequest) {
       alerts,
     });
   } catch (error) {
-    console.error("Inventory alerts error:", error);
+    console.error("Inventory alerts GET error:", error);
 
     return NextResponse.json(
       {

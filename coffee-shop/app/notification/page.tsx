@@ -1,662 +1,556 @@
 
-
-// "use client";
-
-// import { useState } from "react";
-
-// type promo ={
-//     id:number;
-//     offer:string;
-//     discount:string;
-//     notification:string;
-
-// }
-// type orders = {
-//     id:number;
-//     order:string;
-//     confirmerdorder:string;
-//     shipedorder:string;
-//     deliveredorder:string;
-// }
-// type notification = {
-//     id:number;
-//     notification:string;
-//     time:string;
-// }
-
-
-// export default function Notification() {
-//     const [promos, setPromos] = useState<promo[]>([
-//         {
-//             id: 1,
-//             offer: "Buy 1 Get 1 Free",
-//             discount: "50% off",
-//             notification: "Get 50% off on your next order with this promo code!"
-//         },
-//         {
-//             id: 2,
-//             offer: "Free Coffee with Any Purchase",
-//             discount: "Free Coffee",
-//             notification: "Get a free coffee with any
-//         }
-//     ]);
-
-
-//     const [orders, setOrders] = useState<orders[]>([
-//         {
-//             id:1,
-//             order:"Order #1234",
-//             confirmerdorder:"Confirmed",
-//             shipedorder:"Shipped",
-//             deliveredorder:"Delivered"
-//         },
-//         {
-//             id:2,
-//             order:"Order #5678",
-//             confirmerdorder:"Confirmed",
-//             shipedorder:"Shipped",
-//             deliveredorder:"Delivered"
-//         }
-//     ]);
-
-//     const [notifications, setNotifications] = useState<notification[]>([
-//         {
-//             id:1,
-//             notification:"Your order has been shipped!",
-//             time:"2 hours ago"
-//         },
-//         {       id:2,
-//             notification:"Your order has been delivered!",
-//             time:"1 day ago"
-//         }
-//     ]); 
-
-//     const [alert, setalert] = useState(false);  
-
-//     const handlealert = () =>{
-//         setalert(!alert);
-//         return;
-//     }
-
-
-//     const handledelete = (id:number)=>{
-// setNotifications(notifications.filter(notification => notification.id !== id));
-
-//     }
-
-
-    
-//         }
-
-
-
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Bell,
+  BellRing,
+  Check,
+  CheckCheck,
+  Trash2,
+  RefreshCw,
+  ShoppingBag,
+  Gift,
+  Coffee,
+  AlertCircle,
+  Info,
+  Inbox,
+} from "lucide-react";
 
-type Account = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  accountId: string;
-  status: string;
+type NotificationItem = {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
 };
 
-export default function AccountPage() {
-  const [account, setAccount] = useState<Account>({
-    id: 1,
-    name: "Coffee User",
-    email: "user@example.com",
-    phone: "+91 9876543210",
-    accountId: "USER-1001",
-    status: "Active",
-  });
+type FilterType = "ALL" | "UNREAD" | "READ";
 
-  const [name, setName] = useState(account.name);
-  const [phone, setPhone] = useState(account.phone);
+const getNotificationIcon = (type: string) => {
+  const value = type?.toUpperCase() ?? "";
 
-  const [language, setLanguage] = useState("English");
-  const [currency, setCurrency] = useState("INR");
+  if (value.includes("ORDER")) return ShoppingBag;
+  if (value.includes("PAYMENT")) return Coffee;
+  if (value.includes("PROMO") || value.includes("OFFER")) return Gift;
+  if (value.includes("ALERT")) return AlertCircle;
+  if (value.includes("INFO")) return Info;
 
-  const [googleConnected, setGoogleConnected] = useState(true);
+  return Bell;
+};
 
-  const [editProfile, setEditProfile] = useState(false);
-  const [emailEdit, setEmailEdit] = useState(false);
-  const [phoneEdit, setPhoneEdit] = useState(false);
+const formatDate = (date: string) => {
+  const parsedDate = new Date(date);
 
-  const [newEmail, setNewEmail] = useState(account.email);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Unknown date";
+  }
 
-  const [saved, setSaved] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsedDate);
+};
 
-  // ---------------- PROFILE ----------------
+const getRelativeTime = (date: string) => {
+  const timestamp = new Date(date).getTime();
 
-  const handleProfileSave = () => {
-    setAccount((prev) => ({
-      ...prev,
-      name,
-      phone,
-    }));
+  if (Number.isNaN(timestamp)) return "";
 
-    setEditProfile(false);
-    setSaved(true);
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
 
-    setTimeout(() => {
-      setSaved(false);
-    }, 2000);
-  };
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
 
-  // ---------------- EMAIL ----------------
+  return formatDate(date);
+};
 
-  const handleEmailSave = () => {
-    if (!newEmail.includes("@")) {
-      return;
+export default function NotificationPage() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [filter, setFilter] = useState<FilterType>("ALL");
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch("/api/notifications", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to load notifications");
+      }
+
+      setNotifications(result.data ?? []);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => !item.isRead).length,
+    [notifications]
+  );
+
+  const readCount = notifications.length - unreadCount;
+
+  const filteredNotifications = useMemo(() => {
+    if (filter === "UNREAD") {
+      return notifications.filter((item) => !item.isRead);
     }
 
-    setAccount((prev) => ({
-      ...prev,
-      email: newEmail,
-    }));
+    if (filter === "READ") {
+      return notifications.filter((item) => item.isRead);
+    }
 
-    setEmailEdit(false);
+    return notifications;
+  }, [notifications, filter]);
+
+  const handleMarkAsRead = async (
+    notification: NotificationItem
+  ) => {
+    if (notification.isRead || actionLoading) return;
+
+    try {
+      setActionLoading(notification.id);
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `/api/notifications/${encodeURIComponent(notification.id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            isRead: true,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to update notification");
+      }
+
+      setNotifications((previous) =>
+        previous.map((item) =>
+          item.id === notification.id
+            ? { ...item, isRead: true }
+            : item
+        )
+      );
+
+      setSuccess("Notification marked as read.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  // ---------------- PHONE ----------------
+  const handleMarkAllAsRead = async () => {
+    if (unreadCount === 0 || actionLoading) return;
 
-  const handlePhoneSave = () => {
-    setAccount((prev) => ({
-      ...prev,
-      phone,
-    }));
+    try {
+      setActionLoading("ALL");
+      setError("");
+      setSuccess("");
 
-    setPhoneEdit(false);
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to update notifications");
+      }
+
+      setNotifications((previous) =>
+        previous.map((item) => ({
+          ...item,
+          isRead: true,
+        }))
+      );
+
+      setSuccess("All notifications marked as read.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  // ---------------- GOOGLE ----------------
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this notification?"
+    );
 
-  const handleGoogle = () => {
-    setGoogleConnected((prev) => !prev);
-  };
+    if (!confirmed) return;
 
-  // ---------------- LOGOUT ----------------
+    try {
+      setActionLoading(id);
+      setError("");
+      setSuccess("");
 
-  const handleLogout = () => {
-    alert("Logout API will be connected later.");
-  };
+      const response = await fetch(
+        `/api/notifications/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        }
+      );
 
-  // ---------------- DELETE ----------------
+      const result = await response.json();
 
-  const handleDelete = () => {
-    setDeleteOpen(false);
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to delete notification");
+      }
 
-    alert("Account deletion API will be connected later.");
+      setNotifications((previous) =>
+        previous.filter((item) => item.id !== id)
+      );
+
+      setSuccess("Notification deleted successfully.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f1e8] px-4 py-10 text-[#3e2723]">
+    <main className="min-h-screen bg-[#F7F1E8] px-4 py-8 text-[#3E2723] sm:px-6 lg:py-12">
+      <div className="mx-auto max-w-5xl">
 
-      <div className="mx-auto max-w-4xl">
-
-        {/* HEADER */}
-
-        <div className="mb-8">
-
-          <h1 className="text-3xl font-bold">
-            Account Settings
-          </h1>
-
-          <p className="mt-2 text-sm text-[#795548]">
-            Manage your account information and preferences.
-          </p>
-
-        </div>
-
-
-        {/* ACCOUNT INFORMATION */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header */}
+        <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-4">
+            <div className="rounded-2xl bg-[#6F4E37] p-4 text-white shadow-md">
+              <BellRing size={26} />
+            </div>
 
             <div>
+              <h1 className="text-2xl font-bold sm:text-3xl">
+                Notifications
+              </h1>
 
-              <h2 className="text-xl font-semibold">
-                Account Information
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Your basic account information.
+              <p className="mt-1 text-sm text-[#8B6F5C]">
+                All your BrewBites updates in one place.
               </p>
-
             </div>
-
-            <span className="rounded-full bg-green-100 px-4 py-2 text-sm font-medium text-green-700">
-              {account.status}
-            </span>
-
           </div>
-
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-
-            <div className="rounded-xl bg-[#f7f1e8] p-4">
-
-              <p className="text-xs text-gray-500">
-                Name
-              </p>
-
-              <p className="mt-1 font-medium">
-                {account.name}
-              </p>
-
-            </div>
-
-
-            <div className="rounded-xl bg-[#f7f1e8] p-4">
-
-              <p className="text-xs text-gray-500">
-                Email
-              </p>
-
-              <p className="mt-1 font-medium">
-                {account.email}
-              </p>
-
-            </div>
-
-
-            <div className="rounded-xl bg-[#f7f1e8] p-4">
-
-              <p className="text-xs text-gray-500">
-                Phone
-              </p>
-
-              <p className="mt-1 font-medium">
-                {account.phone}
-              </p>
-
-            </div>
-
-
-            <div className="rounded-xl bg-[#f7f1e8] p-4">
-
-              <p className="text-xs text-gray-500">
-                Account ID
-              </p>
-
-              <p className="mt-1 font-medium">
-                {account.accountId}
-              </p>
-
-            </div>
-
-          </div>
-
 
           <button
-            onClick={() => setEditProfile(!editProfile)}
-            className="mt-5 rounded-xl bg-[#6f4e37] px-5 py-2 text-sm text-white hover:bg-[#5a3d2b]"
+            type="button"
+            onClick={loadNotifications}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D8C5B5] bg-white px-4 py-3 text-sm font-semibold text-[#6F4E37] transition hover:bg-[#F7F1E8] disabled:opacity-50"
           >
-            {editProfile ? "Close" : "Edit Profile"}
+            <RefreshCw
+              size={16}
+              className={loading ? "animate-spin" : ""}
+            />
+            Refresh
           </button>
+        </header>
 
-
-          {editProfile && (
-
-            <div className="mt-5 space-y-4 rounded-xl bg-[#f7f1e8] p-5">
-
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Name"
-                className="w-full rounded-xl border border-gray-300 p-3"
-              />
-
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Phone"
-                className="w-full rounded-xl border border-gray-300 p-3"
-              />
-
-              <button
-                onClick={handleProfileSave}
-                className="rounded-xl bg-[#6f4e37] px-5 py-2 text-sm text-white"
-              >
-                Save Changes
-              </button>
-
+        {/* Summary Cards */}
+        <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-[#E9DDD1] bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#8B6F5C]">
+                Total Notifications
+              </p>
+              <Bell size={20} className="text-[#6F4E37]" />
             </div>
 
-          )}
-
-          {saved && (
-            <p className="mt-3 text-sm text-green-600">
-              Profile updated successfully.
+            <p className="mt-3 text-3xl font-bold">
+              {notifications.length}
             </p>
-          )}
-
-        </section>
-
-
-        {/* EMAIL */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold">
-            Email Address
-          </h2>
-
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-            <div>
-
-              <p className="font-medium">
-                {account.email}
-              </p>
-
-              <p className="mt-1 text-sm text-green-600">
-                ✓ Verified
-              </p>
-
-            </div>
-
-            <button
-              onClick={() => setEmailEdit(!emailEdit)}
-              className="rounded-xl border border-[#6f4e37] px-4 py-2 text-sm text-[#6f4e37]"
-            >
-              {emailEdit ? "Cancel" : "Change Email"}
-            </button>
-
           </div>
 
-
-          {emailEdit && (
-
-            <div className="mt-5 space-y-3">
-
-              <input
-                type="email"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 p-3"
-              />
-
-              <button
-                onClick={handleEmailSave}
-                className="rounded-xl bg-[#6f4e37] px-5 py-2 text-sm text-white"
-              >
-                Save Email
-              </button>
-
+          <div className="rounded-2xl border border-[#E9DDD1] bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#8B6F5C]">
+                Unread
+              </p>
+              <BellRing size={20} className="text-orange-600" />
             </div>
 
-          )}
-
-        </section>
-
-
-        {/* PHONE */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold">
-            Phone Number
-          </h2>
-
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-            <div>
-
-              <p className="font-medium">
-                {account.phone}
-              </p>
-
-              <p className="mt-1 text-sm text-green-600">
-                ✓ Verified
-              </p>
-
-            </div>
-
-            <button
-              onClick={() => setPhoneEdit(!phoneEdit)}
-              className="rounded-xl border border-[#6f4e37] px-4 py-2 text-sm text-[#6f4e37]"
-            >
-              {phoneEdit ? "Cancel" : "Change Phone"}
-            </button>
-
+            <p className="mt-3 text-3xl font-bold text-orange-600">
+              {unreadCount}
+            </p>
           </div>
 
-
-          {phoneEdit && (
-
-            <div className="mt-5 space-y-3">
-
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 p-3"
-              />
-
-              <button
-                onClick={handlePhoneSave}
-                className="rounded-xl bg-[#6f4e37] px-5 py-2 text-sm text-white"
-              >
-                Save Phone
-              </button>
-
-            </div>
-
-          )}
-
-        </section>
-
-
-        {/* PREFERENCES */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold">
-            Account Preferences
-          </h2>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium">
-                Language
-              </label>
-
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 p-3"
-              >
-                <option>English</option>
-                <option>Hindi</option>
-              </select>
-
-            </div>
-
-
-            <div>
-
-              <label className="mb-2 block text-sm font-medium">
-                Currency
-              </label>
-
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 p-3"
-              >
-                <option value="INR">INR ₹</option>
-                <option value="USD">USD $</option>
-                <option value="EUR">EUR €</option>
-              </select>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* CONNECTED ACCOUNTS */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold">
-            Connected Accounts
-          </h2>
-
-          <div className="mt-5 flex items-center justify-between rounded-xl bg-[#f7f1e8] p-4">
-
-            <div>
-
-              <h3 className="font-medium">
-                Google
-              </h3>
-
-              <p className="text-sm text-gray-500">
-                {googleConnected
-                  ? "Connected to your account"
-                  : "Not connected"}
+          <div className="rounded-2xl border border-[#E9DDD1] bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-[#8B6F5C]">
+                Read
               </p>
-
+              <CheckCheck size={20} className="text-green-600" />
             </div>
 
-            <button
-              onClick={handleGoogle}
-              className={`rounded-xl px-4 py-2 text-sm text-white ${
-                googleConnected
-                  ? "bg-red-500"
-                  : "bg-[#6f4e37]"
-              }`}
-            >
-              {googleConnected
-                ? "Disconnect"
-                : "Connect"}
-            </button>
-
+            <p className="mt-3 text-3xl font-bold text-green-600">
+              {readCount}
+            </p>
           </div>
-
         </section>
 
+        {/* Main Notification Panel */}
+        <section className="overflow-hidden rounded-2xl border border-[#E9DDD1] bg-white shadow-sm">
 
-        {/* ACCOUNT STATUS */}
-
-        <section className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold">
-            Account Status
-          </h2>
-
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-green-50 p-4">
-
+          {/* Panel Header */}
+          <div className="flex flex-col justify-between gap-4 border-b border-[#EEE4DA] p-5 sm:flex-row sm:items-center sm:p-6">
             <div>
-
-              <p className="font-medium text-green-800">
-                Account Active
-              </p>
-
-              <p className="text-sm text-green-700">
-                Your account is currently active.
-              </p>
-
-            </div>
-
-            <span className="rounded-full bg-green-600 px-3 py-1 text-xs text-white">
-              Active
-            </span>
-
-          </div>
-
-        </section>
-
-
-        {/* DANGER ZONE */}
-
-        <section className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
-
-          <h2 className="text-xl font-semibold text-red-700">
-            Danger Zone
-          </h2>
-
-          <p className="mt-2 text-sm text-gray-600">
-            These actions affect your account permanently.
-          </p>
-
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-
-            <button
-              onClick={handleLogout}
-              className="rounded-xl border border-gray-400 px-5 py-2 text-sm text-gray-700"
-            >
-              Logout
-            </button>
-
-            <button
-              onClick={() => setDeleteOpen(true)}
-              className="rounded-xl bg-red-600 px-5 py-2 text-sm text-white hover:bg-red-700"
-            >
-              Delete Account
-            </button>
-
-          </div>
-
-        </section>
-
-
-        {/* DELETE MODAL */}
-
-        {deleteOpen && (
-
-          <div className="fixed inset-0 flex items-center justify-center bg-black/40 px-4">
-
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-
-              <h2 className="text-xl font-bold text-red-700">
-                Delete Account?
+              <h2 className="text-xl font-bold">
+                Your Activity
               </h2>
 
-              <p className="mt-3 text-sm text-gray-600">
-                This action cannot be undone. All account-related
-                information may be permanently removed.
+              <p className="mt-1 text-sm text-[#8B6F5C]">
+                Manage your recent notifications.
               </p>
-
-              <div className="mt-6 flex justify-end gap-3">
-
-                <button
-                  onClick={() => setDeleteOpen(false)}
-                  className="rounded-xl border px-4 py-2 text-sm"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={handleDelete}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm text-white"
-                >
-                  Confirm Delete
-                </button>
-
-              </div>
-
             </div>
 
+            <button
+              type="button"
+              onClick={handleMarkAllAsRead}
+              disabled={unreadCount === 0 || actionLoading !== null}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#6F4E37] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#573B2A] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <CheckCheck size={17} />
+              Mark all as read
+            </button>
           </div>
 
-        )}
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2 border-b border-[#EEE4DA] px-5 py-4 sm:px-6">
+            {(
+              [
+                { value: "ALL", label: "All" },
+                { value: "UNREAD", label: "Unread" },
+                { value: "READ", label: "Read" },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setFilter(item.value)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  filter === item.value
+                    ? "bg-[#6F4E37] text-white"
+                    : "bg-[#F7F1E8] text-[#6F4E37] hover:bg-[#EDE1D4]"
+                }`}
+              >
+                {item.label}
 
+                {item.value === "UNREAD" && unreadCount > 0 && (
+                  <span className="ml-1">
+                    ({unreadCount})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Feedback */}
+          {error && (
+            <div
+              role="alert"
+              className="mx-5 mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mx-6"
+            >
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div
+              role="status"
+              className="mx-5 mt-5 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:mx-6"
+            >
+              {success}
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <RefreshCw
+                size={30}
+                className="animate-spin text-[#6F4E37]"
+              />
+
+              <p className="mt-4 text-sm text-[#8B6F5C]">
+                Loading notifications...
+              </p>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            /* Empty State */
+            <div className="flex flex-col items-center justify-center px-5 py-20 text-center">
+              <div className="rounded-full bg-[#F7F1E8] p-6">
+                <Inbox size={35} className="text-[#6F4E37]" />
+              </div>
+
+              <h3 className="mt-5 text-lg font-bold">
+                {filter === "UNREAD"
+                  ? "You're all caught up!"
+                  : filter === "READ"
+                    ? "No read notifications"
+                    : "No notifications yet"}
+              </h3>
+
+              <p className="mt-2 max-w-sm text-sm leading-6 text-[#8B6F5C]">
+                {filter === "UNREAD"
+                  ? "You don't have any unread notifications right now."
+                  : "Your order updates, payment alerts and offers will appear here."}
+              </p>
+            </div>
+          ) : (
+            /* Notification List */
+            <div className="divide-y divide-[#EEE4DA]">
+              {filteredNotifications.map((notification) => {
+                const Icon = getNotificationIcon(notification.type);
+                const busy = actionLoading === notification.id;
+
+                return (
+                  <article
+                    key={notification.id}
+                    className={`flex flex-col gap-4 px-5 py-5 transition hover:bg-[#FCFAF7] sm:flex-row sm:items-start sm:justify-between sm:px-6 ${
+                      !notification.isRead ? "bg-[#FCF8F3]" : ""
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-1 gap-4">
+                      <div
+                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                          notification.isRead
+                            ? "bg-[#F1EAE2] text-[#795548]"
+                            : "bg-[#6F4E37] text-white"
+                        }`}
+                      >
+                        <Icon size={21} />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="break-words font-semibold text-[#3E2723]">
+                            {notification.title}
+                          </h3>
+
+                          {!notification.isRead && (
+                            <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-bold text-orange-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-2 break-words text-sm leading-6 text-[#795548]">
+                          {notification.message}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A18A79]">
+                          <span>
+                            {getRelativeTime(notification.createdAt)}
+                          </span>
+
+                          <span>•</span>
+
+                          <span>
+                            {formatDate(notification.createdAt)}
+                          </span>
+                        </div>
+
+                        <span className="mt-2 inline-block rounded-md bg-[#F1EAE2] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#795548]">
+                          {notification.type?.replaceAll("_", " ") || "GENERAL"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex shrink-0 items-center gap-2 pl-16 sm:pl-0">
+                      {!notification.isRead && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleMarkAsRead(notification)
+                          }
+                          disabled={actionLoading !== null}
+                          title="Mark as read"
+                          aria-label="Mark notification as read"
+                          className="rounded-lg border border-[#D8C5B5] p-2.5 text-[#6F4E37] transition hover:bg-[#F7F1E8] disabled:opacity-40"
+                        >
+                          {busy ? (
+                            <RefreshCw
+                              size={17}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <Check size={17} />
+                          )}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(notification.id)}
+                        disabled={actionLoading !== null}
+                        title="Delete notification"
+                        aria-label="Delete notification"
+                        className="rounded-lg border border-red-200 p-2.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Footer */}
+        <footer className="mt-6 text-center">
+          <p className="text-xs text-[#A18A79]">
+            <Coffee size={13} className="mr-1 inline-block" />
+            BrewBites · Your notifications are private to your account.
+          </p>
+        </footer>
       </div>
-
     </main>
   );
 }
